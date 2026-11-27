@@ -7,7 +7,6 @@ informando seu identificador e PIN de quatro dígitos.
 As tentativas são limitadas e registradas no banco.
 """
 
-import re
 import time
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -300,10 +299,6 @@ def barber_appointments():
 
 
 
-def _phone_digits(value):
-    return re.sub(r"\D", "", str(value or ""))
-
-
 def _clock_value(value, field_name):
     try:
         return datetime.strptime(str(value), "%H:%M").strftime("%H:%M")
@@ -442,7 +437,7 @@ def barber_availability():
 @barber_bp.route("/appointments", methods=["POST"])
 @barber_required
 def create_barber_appointment():
-    """Permite ao profissional cadastrar um cliente e reservar um serviço na própria agenda."""
+    """Permite ao profissional selecionar um cliente cadastrado e reservar um serviço na própria agenda."""
     from datetime import datetime
 
     data = request.get_json(silent=True)
