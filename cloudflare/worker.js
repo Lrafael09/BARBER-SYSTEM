@@ -153,7 +153,20 @@ export default {
         response = json({ error: "Erro interno.", detail: env.ENVIRONMENT === "development" ? error.message : undefined }, 500);
       }
     } else if (env.ASSETS) {
-      response = await env.ASSETS.fetch(request);
+      if (request.method === "GET" && (url.pathname === "/admin/panel" || url.pathname === "/admin/panel/")) {
+        const target = new URL("/admin/panel/index.html", url);
+        response = await env.ASSETS.fetch(new Request(target, request));
+      } else if (request.method === "GET" && /^\/barber\/[a-z0-9-]+$/.test(url.pathname)) {
+        const slug = url.pathname.split("/")[2];
+        const target = new URL("/barber.html?slug=" + encodeURIComponent(slug), url);
+        response = await env.ASSETS.fetch(new Request(target, request));
+      } else if (request.method === "GET" && /^\/b\/[a-z0-9-]+\/book$/.test(url.pathname)) {
+        const slug = url.pathname.split("/")[2];
+        const target = new URL("/booking.html?slug=" + encodeURIComponent(slug), url);
+        response = await env.ASSETS.fetch(new Request(target, request));
+      } else {
+        response = await env.ASSETS.fetch(request);
+      }
     } else {
       response = new Response("Barber System - interface em migração.", { status: 200 });
     }
