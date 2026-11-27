@@ -44,6 +44,8 @@ def init_db():
             slug TEXT NOT NULL UNIQUE,
             whatsapp TEXT,
             logo_data TEXT,
+            brand_color TEXT NOT NULL DEFAULT '#a8f05a',
+            theme TEXT NOT NULL DEFAULT 'dark' CHECK (theme IN ('dark', 'light')),
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -55,6 +57,7 @@ def init_db():
             password_hash TEXT,
             pin_hash TEXT,
             role TEXT NOT NULL CHECK (role IN ('owner', 'barber')),
+            can_serve INTEGER NOT NULL DEFAULT 0 CHECK (can_serve IN (0, 1)),
             is_active INTEGER NOT NULL DEFAULT 1
                 CHECK (is_active IN (0, 1)),
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -177,6 +180,61 @@ def init_db():
             locked_until INTEGER
         );
 
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barbershop_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (barbershop_id) REFERENCES barbershops (id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS staff_hours (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barbershop_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            weekday INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+            is_open INTEGER NOT NULL DEFAULT 0 CHECK (is_open IN (0, 1)),
+            open_time TEXT,
+            close_time TEXT,
+            break_start TEXT,
+            break_end TEXT,
+            UNIQUE (barbershop_id, user_id, weekday),
+            FOREIGN KEY (barbershop_id) REFERENCES barbershops (id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS finance_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barbershop_id INTEGER NOT NULL,
+            entry_type TEXT NOT NULL CHECK (entry_type IN ('income', 'expense')),
+            description TEXT NOT NULL,
+            category TEXT,
+            amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+            entry_date TEXT NOT NULL,
+            appointment_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (barbershop_id) REFERENCES barbershops (id) ON DELETE CASCADE,
+            FOREIGN KEY (appointment_id) REFERENCES appointments (id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS financial_goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barbershop_id INTEGER NOT NULL,
+            period_type TEXT NOT NULL CHECK (period_type IN ('daily', 'weekly', 'monthly')),
+            target_cents INTEGER NOT NULL CHECK (target_cents >= 0),
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (barbershop_id, period_type),
+            FOREIGN KEY (barbershop_id) REFERENCES barbershops (id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_finance_entries_date
+            ON finance_entries (barbershop_id, entry_date, entry_type);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_appointment_income
+            ON finance_entries (appointment_id) WHERE appointment_id IS NOT NULL;
+
         CREATE INDEX IF NOT EXISTS idx_users_barbershop_role
             ON users (barbershop_id, role);
 
@@ -201,6 +259,15 @@ def init_db():
     columns = {row["name"] for row in db.execute("PRAGMA table_info(barbershops)").fetchall()}
     if "logo_data" not in columns:
         db.execute("ALTER TABLE barbershops ADD COLUMN logo_data TEXT")
+    if "brand_color" not in columns:
+        db.execute("ALTER TABLE barbershops ADD COLUMN brand_color TEXT NOT NULL DEFAULT '#a8f05a'")
+    if "theme" not in columns:
+        db.execute("ALTER TABLE barbershops ADD COLUMN theme TEXT NOT NULL DEFAULT 'dark'")
+
+    user_columns = {row["name"] for row in db.execute("PRAGMA table_info(users)").fetchall()}
+    if "can_serve" not in user_columns:
+        db.execute("ALTER TABLE users ADD COLUMN can_serve INTEGER NOT NULL DEFAULT 0")
+        db.execute("UPDATE users SET can_serve = 1 WHERE role = 'barber'")
 
     db.commit()
 
