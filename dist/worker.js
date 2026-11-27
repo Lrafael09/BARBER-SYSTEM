@@ -122,7 +122,7 @@ var Xe=Object.create;var Ne=Object.defineProperty;var qe=Object.getOwnPropertyDe
         </div>
         <div class="calendar-notes"><span>Verde: agendado</span><span>Verde-claro: conclu\xEDdo</span><span>Vermelho: cancelado</span></div>
         <div id="day-calendar" class="calendar-scroll"></div>
-        <section class="panel attendance-admin" style="margin-top:14px"><div class="panel-header"><div><h2>Presen\xE7a da equipe</h2><p class="muted">Hor\xE1rios de chegada e sa\xEDda registrados pelos colaboradores.</p></div></div><div id="attendance-list" class="list"><p class="muted">Carregando presen\xE7a...</p></div></section>
+        <section class="panel attendance-admin" style="margin-top:14px"><div class="panel-header"><div><h2>Presen\xE7a da equipe</h2><p class="muted">Hor\xE1rios de chegada e sa\xEDda registrados pelos colaboradores.</p></div><button class="ghost" id="refresh-attendance">Atualizar</button></div><div id="attendance-list" class="list"><p class="muted">Carregando presen\xE7a...</p></div></section>
         <div id="agenda-message" class="message"></div>
       </section>
       <div class="two-col" style="margin-top:14px">
@@ -335,6 +335,10 @@ function populateAgendaStaff(staff){
 
  if([...select.options].some(o=>o.value===old))select.value=old;
 }
+$('refresh-attendance').addEventListener('click',async()=>{
+ try{const date=$('agenda-date').value||toLocalInputDate(new Date());const data=await api('/admin/attendance?date='+encodeURIComponent(date));renderStaffAttendance(data.staff||[]);}
+ catch(e){showMessage('agenda-message',e.message,true);}
+});
 function renderStaffAttendance(staff){
  const root=$('attendance-list');root.replaceChildren();
  if(!staff.length){root.append(empty('Nenhum profissional ativo cadastrado.'));return;}
@@ -1089,9 +1093,11 @@ function renderAttendance(){
  const departed=attendance&&attendance.departed_at;
  $('attendance-arrived-at').textContent=arrived?arrived.slice(11,16):'Ainda n\xE3o registrada';
  $('attendance-departed-at').textContent=departed?departed.slice(11,16):'Ainda n\xE3o registrada';
+ $('attendance-arrival').textContent=arrived?'Chegada \xB7 '+arrived.slice(11,16):'Chegada';
+ $('attendance-departure').textContent=departed?'Sa\xEDda \xB7 '+departed.slice(11,16):'Sa\xEDda';
  $('attendance-arrival').disabled=!!arrived;
  $('attendance-departure').disabled=!arrived||!!departed;
- $('attendance-status').textContent=departed?'Expediente encerrado hoje.':arrived?'Voc\xEA est\xE1 dispon\xEDvel para agendamentos de hoje.':'Registre sua chegada para aparecer como dispon\xEDvel hoje.';
+ $('attendance-status').textContent=departed?'Expediente encerrado hoje.':arrived?'Voc\xEA est\xE1 dispon\xEDvel para clientes hoje.':'Registre sua chegada para aparecer como dispon\xEDvel para clientes hoje.';
 }
 $('attendance-arrival').addEventListener('click',async()=>{
  $('attendance-arrival').disabled=true;
