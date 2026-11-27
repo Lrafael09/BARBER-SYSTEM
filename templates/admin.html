@@ -379,6 +379,7 @@ function renderDailyCalendar(appointments,selectedDate,businessDays,staff){
    const customer=document.createElement('strong');customer.textContent=a.customer_name;
    card.append(time,customer);
    const service=document.createElement('span');service.className='appt-service';service.textContent=a.service_name;card.append(service);
+    col.append(card);
   });
   body.append(col);
  });
