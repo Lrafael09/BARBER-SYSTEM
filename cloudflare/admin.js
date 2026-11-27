@@ -317,27 +317,29 @@ async function createWalkInQueue(request, env, shopId) {
     return hour * 60 + minute;
   };
   const nowMinutes = localNow.minutes;
+  const duration = Number(service.duration_minutes);
   const opening = toMinutes(effective?.open_time);
   const closing = toMinutes(effective?.close_time);
+  if (!Number.isSafeInteger(duration) || duration < 1 || duration > 1440) {
+    return json({ error: "A duração do serviço está inválida." }, 400);
+  }
   if (!business?.is_open || !effective?.is_open || opening === null || closing === null ||
-      nowMinutes < opening || nowMinutes >= closing) {
+      nowMinutes < opening || nowMinutes + duration > closing) {
     return json({ error: "A barbearia ou o profissional está fora do expediente neste momento." }, 409);
   }
   for (const [start, end] of [[business.break_start,business.break_end],[effective.break_start,effective.break_end],[staffBreak?.break_start,staffBreak?.break_end]]) {
     const breakStart = toMinutes(start), breakEnd = toMinutes(end);
-    if (breakStart !== null && breakEnd !== null && nowMinutes < breakEnd && nowMinutes + Number(service.duration_minutes) > breakStart) {
+    if (breakStart !== null && breakEnd !== null && nowMinutes < breakEnd && nowMinutes + duration > breakStart) {
       return json({ error: "A fila está pausada durante o intervalo." }, 409);
     }
   }
   const startsAt = localNow.date + "T" + localNow.time + ":00";
-  const endMinutes = nowMinutes + Number(service.duration_minutes);
-  if (!Number.isSafeInteger(Number(service.duration_minutes)) || endMinutes >= 1440) {
-    return json({ error: "A duração do serviço está inválida." }, 400);
-  }
+  const endMinutes = nowMinutes + duration;
+  if (endMinutes >= 1440) return json({ error: "O serviço precisa terminar no mesmo dia." }, 409);
   const endsAt = localNow.date + "T" + String(Math.floor(endMinutes / 60)).padStart(2,"0") + ":" + String(endMinutes % 60).padStart(2,"0") + ":00";
   const block = await env.DB.prepare(
-    "SELECT id FROM time_blocks WHERE barbershop_id=? AND (barber_id IS NULL OR barber_id=?) AND starts_at<=? AND ends_at>? LIMIT 1"
-  ).bind(shopId, barberId, startsAt, startsAt).first();
+    "SELECT id FROM time_blocks WHERE barbershop_id=? AND (barber_id IS NULL OR barber_id=?) AND starts_at<? AND ends_at>? LIMIT 1"
+  ).bind(shopId, barberId, endsAt, startsAt).first();
   if (block) return json({ error: "Existe um bloqueio ativo neste momento." }, 409);
 
   let customerId = Number(data.customer_id) || null;
