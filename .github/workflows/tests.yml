@@ -29,5 +29,7 @@ jobs:
           node-version: "22"
       - name: Install JavaScript dependencies
         run: npm install
-      - name: Run Cloudflare authentication tests
+      - name: Run Cloudflare API tests
         run: npm test
+      - name: Validate Worker bundle
+        run: npx wrangler deploy --dry-run
