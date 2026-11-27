@@ -153,7 +153,9 @@ export default {
         response = json({ error: "Erro interno.", detail: env.ENVIRONMENT === "development" ? error.message : undefined }, 500);
       }
     } else if (env.ASSETS) {
-      if (request.method === "GET" && (url.pathname === "/admin/panel" || url.pathname === "/admin/panel/")) {
+      if (request.method === "GET" && ["/", "/admin", "/admin/"].includes(url.pathname)) {
+        response = Response.redirect(new URL("/admin/panel", url), 302);
+      } else if (request.method === "GET" && (url.pathname === "/admin/panel" || url.pathname === "/admin/panel/")) {
         const target = new URL("/admin/panel/index.html", url);
         response = await env.ASSETS.fetch(new Request(target, request));
       } else if (request.method === "GET" && /^\/barber\/[a-z0-9-]+$/.test(url.pathname)) {
