@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101010"><title>Painel | BARBER-SYSTEM</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0b0b0b;color:#f5f5f5}
+*{box-sizing:border-box}body{margin:0;padding:24px 16px 50px}main{max-width:1100px;margin:auto}
+.brand{font-size:12px;letter-spacing:.17em;color:#a8f05a}h1{font-size:34px;margin:10px 0}p{color:#aaa}
+.card{background:#151515;border:1px solid #292929;border-radius:15px;padding:18px;margin:15px 0}
+label{display:block;color:#bbb;font-size:13px;margin:12px 0 6px}
+input,select,button{padding:12px;border-radius:10px;border:1px solid #3b3b3b;background:#0c0c0c;color:white;font:inherit;width:100%}
+button{background:#a8f05a;color:#111;border:0;font-weight:700;cursor:pointer;margin-top:12px}
+button.secondary{background:#282828;color:#eee;border:1px solid #444}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{background:#101010;border:1px solid #303030;border-radius:12px;padding:15px}
+.metric span{display:block;color:#aaa;font-size:12px}.metric strong{font-size:25px;display:block;margin-top:8px}
+.row{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.filters{display:flex;gap:8px;flex-wrap:wrap}.filters input,.filters select{width:auto;min-width:150px}
+.item{padding:13px 0;border-bottom:1px solid #303030}.muted{color:#999;font-size:13px}.message{color:#a8f05a;white-space:pre-wrap;margin-top:10px}
+.hidden{display:none}.columns{display:grid;grid-template-columns:1.4fr 1fr;gap:15px}
+@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.columns{grid-template-columns:1fr}}
+@media(max-width:430px){.grid{grid-template-columns:1fr 1fr}.metric strong{font-size:20px}}
+</style></head>
+<body><main>
+<div class="brand">BARBER-SYSTEM / ADMINISTRAÇÃO</div>
+<section class="card" id="login-card">
+<h1>Acesso do proprietário</h1><p>Entre com o e-mail e a senha cadastrados na criação da barbearia.</p>
+<label for="email">E-mail</label><input id="email" type="email" autocomplete="username">
+<label for="password">Senha</label><input id="password" type="password" autocomplete="current-password">
+<button id="login">Entrar no painel</button><div id="login-message" class="message" role="status"></div>
+</section>
+<section id="dashboard" class="hidden">
+<div class="row"><div><h1 id="welcome">Painel administrativo</h1><p>Resumo e agenda da sua barbearia.</p></div><button class="secondary" id="logout" style="width:auto">Sair</button></div>
+<div class="grid" id="metrics"></div>
+<div class="columns">
+<section class="card"><div class="row"><h2>Agendamentos</h2><a id="public-link" target="_blank" rel="noopener" style="color:#a8f05a">Página pública</a></div>
+<div class="filters"><input id="date" type="date"><select id="status"><option value="">Todos os status</option><option value="scheduled">Agendados</option><option value="completed">Concluídos</option><option value="cancelled">Cancelados</option></select><button id="load-appointments" style="width:auto">Filtrar</button></div>
+<div id="appointments"></div><div id="agenda-message" class="message"></div></section>
+<section class="card"><h2>Novo serviço</h2>
+<label for="service-name">Nome</label><input id="service-name" maxlength="120" placeholder="Ex.: Corte">
+<label for="service-price">Preço em reais</label><input id="service-price" inputmode="decimal" placeholder="35,00">
+<label for="service-duration">Duração em minutos</label><input id="service-duration" type="number" min="1" max="1440" value="30">
+<label for="service-description">Descrição</label><input id="service-description" maxlength="500">
+<button id="add-service">Cadastrar serviço</button><div id="service-message" class="message"></div>
+<h3>Serviços cadastrados</h3><div id="services" class="muted"></div></section>
+</div>
+</section>
+</main>
+<script>
+(() => {
+const $=id=>document.getElementById(id);
+async function request(path,options={}) {
+ const response=await fetch(path,{...options,headers:{...(options.headers||{}),'Content-Type':'application/json'}});
+ const data=await response.json();if(!response.ok)throw new Error(data.error||'Ocorreu um erro.');
+ return data;
+}
+function money(cents){return 'R$ '+(cents/100).toFixed(2).replace('.',',');}
+function metric(label,value){const card=document.createElement('div');card.className='metric';const span=document.createElement('span');span.textContent=label;const strong=document.createElement('strong');strong.textContent=value;card.append(span,strong);return card;}
+async function loadDashboard(){
+ const [me,dash]=await Promise.all([request('/auth/me'),request('/admin/dashboard')]);
+ $('welcome').textContent='Olá, '+me.name;
+ $('public-link').href='/b/'+encodeURIComponent((await request('/auth/me')).barbershop_slug||'');
+ const metrics=$('metrics');metrics.replaceChildren(
+  metric('Agendamentos hoje',dash.today.appointments),
+  metric('Pendentes',dash.today.scheduled),
+  metric('Concluídos',dash.today.completed),
+  metric('Faturamento hoje',money(dash.today.revenue_cents)),
+  metric('Faturamento no mês',money(dash.month.revenue_cents)),
+  metric('Clientes',dash.base.customers),
+  metric('Serviços ativos',dash.base.active_services),
+  metric('Profissionais ativos',dash.base.active_barbers)
+ );
+ $('dashboard').classList.remove('hidden');$('login-card').classList.add('hidden');
+ await loadAppointments();await loadServices();
+}
+async function loadAppointments(){
+ const params=new URLSearchParams();if($('date').value)params.set('date',$('date').value);if($('status').value)params.set('status',$('status').value);
+ const data=await request('/admin/appointments?'+params.toString());const root=$('appointments');root.replaceChildren();
+ if(!data.appointments.length){$('agenda-message').textContent='Nenhum agendamento encontrado.';return;}
+ $('agenda-message').textContent='';
+ data.appointments.forEach(a=>{
+  const item=document.createElement('div');item.className='item';
+  const name=document.createElement('strong');name.textContent=a.customer_name+' — '+a.service_name;item.appendChild(name);
+  const detail=document.createElement('p');detail.className='muted';detail.textContent=a.starts_at.replace('T',' ').slice(0,16)+' • '+(a.barber_name||'Sem profissional')+' • '+money(a.price_cents)+' • '+a.status;item.appendChild(detail);
+  if(a.status==='scheduled'){
+   const cancel=document.createElement('button');cancel.className='secondary';cancel.textContent='Cancelar agendamento';cancel.addEventListener('click',async()=>{
+    const reason=prompt('Motivo do cancelamento:');if(!reason)return;
+    try{await request('/admin/appointments/'+a.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});await loadAppointments();}
+    catch(e){$('agenda-message').textContent=e.message;}
+   });item.appendChild(cancel);
+  }
+  root.appendChild(item);
+ });
+}
+async function loadServices(){
+ const data=await request('/admin/services');const root=$('services');root.replaceChildren();
+ if(!data.services.length){root.textContent='Nenhum serviço cadastrado.';return;}
+ data.services.forEach(s=>{const line=document.createElement('div');line.textContent=s.name+' — '+money(s.price_cents)+' — '+s.duration_minutes+' min'+(s.is_active?'':' (inativo)');line.style.padding='7px 0';root.appendChild(line);});
+}
+$('login').addEventListener('click',async()=>{
+ try{await request('/auth/login',{method:'POST',body:JSON.stringify({email:$('email').value,password:$('password').value})});await loadDashboard();}
+ catch(e){$('login-message').textContent=e.message;}
+});
+$('logout').addEventListener('click',async()=>{await fetch('/auth/logout',{method:'POST'});$('dashboard').classList.add('hidden');$('login-card').classList.remove('hidden');});
+$('load-appointments').addEventListener('click',()=>loadAppointments().catch(e=>$('agenda-message').textContent=e.message));
+$('add-service').addEventListener('click',async()=>{
+ try{
+  await request('/admin/services',{method:'POST',body:JSON.stringify({
+   name:$('service-name').value,price:$('service-price').value,
+   duration_minutes:Number($('service-duration').value),description:$('service-description').value
+  })});
+  $('service-message').textContent='Serviço cadastrado.';$('service-name').value='';$('service-price').value='';$('service-description').value='';
+  await loadServices();
+ }catch(e){$('service-message').textContent=e.message;}
+});
+loadDashboard().catch(()=>{});
+})();
+</script></body></html>
