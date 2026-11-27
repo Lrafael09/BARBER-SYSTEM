@@ -298,7 +298,7 @@ async function createWalkInQueue(request, env, shopId) {
     if (!customer) return json({ error: "Cliente não encontrado nesta barbearia." }, 404);
   } else {
     const name = String(data.customer_name || "").trim();
-    const phone = String(data.customer_phone || "").replace(/\\D/g, "");
+    const phone = String(data.customer_phone || "").replace(/\D/g, "");
     if (!name || name.length > 120 || phone.length < 10 || phone.length > 13) {
       return json({ error: "Informe nome e telefone com DDD para cadastrar o cliente." }, 400);
     }
@@ -333,7 +333,7 @@ async function createWalkInQueue(request, env, shopId) {
   ).bind(shopId).first();
   effective = effective || business;
   const toMinutes = value => {
-    if (typeof value !== "string" || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(value)) return null;
+    if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
     const [hour, minute] = value.split(":").map(Number);
     return hour * 60 + minute;
   };
