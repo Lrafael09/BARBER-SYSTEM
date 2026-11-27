@@ -177,6 +177,7 @@ export default {
       try {
         response = await api(request, env, url);
       } catch (error) {
+        console.error("BARBER_API_UNHANDLED", { path: url.pathname, name: error?.name, message: error?.message, stack: error?.stack });
         response = json({ error: "Erro interno.", detail: env.ENVIRONMENT === "development" ? error.message : undefined }, 500);
       }
     } else if (request.method === "GET") {
