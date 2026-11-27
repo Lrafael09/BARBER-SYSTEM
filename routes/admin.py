@@ -667,3 +667,181 @@ def delete_time_block(block_id):
         return jsonify({"error": "Bloqueio não encontrado."}), 404
 
     return jsonify({"message": "Bloqueio removido com sucesso."}), 200
+
+
+
+@admin_bp.route("/dashboard", methods=["GET"])
+@active_owner_required
+def admin_dashboard():
+    """Resumo operacional da barbearia para a página inicial do proprietário."""
+
+    db = get_db()
+    barbershop_id = session["barbershop_id"]
+
+    totals = db.execute(
+        """
+        SELECT
+            COUNT(*) AS appointments_today,
+            SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled_today,
+            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_today,
+            SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_today,
+            COALESCE(SUM(
+                CASE WHEN status = 'completed' THEN price_cents ELSE 0 END
+            ), 0) AS revenue_today_cents
+        FROM appointments
+        WHERE barbershop_id = ?
+          AND date(starts_at) = date('now', 'localtime')
+        """,
+        (barbershop_id,)
+    ).fetchone()
+
+    monthly = db.execute(
+        """
+        SELECT
+            COUNT(*) AS appointments_month,
+            COALESCE(SUM(
+                CASE WHEN status = 'completed' THEN price_cents ELSE 0 END
+            ), 0) AS revenue_month_cents
+        FROM appointments
+        WHERE barbershop_id = ?
+          AND strftime('%Y-%m', starts_at) = strftime('%Y-%m', 'now', 'localtime')
+        """,
+        (barbershop_id,)
+    ).fetchone()
+
+    counts = db.execute(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM customers WHERE barbershop_id = ?) AS customers,
+            (SELECT COUNT(*) FROM services WHERE barbershop_id = ? AND is_active = 1) AS active_services,
+            (SELECT COUNT(*) FROM users WHERE barbershop_id = ? AND role = 'barber' AND is_active = 1) AS active_barbers
+        """,
+        (barbershop_id, barbershop_id, barbershop_id)
+    ).fetchone()
+
+    return jsonify({
+        "today": {
+            "appointments": totals["appointments_today"] or 0,
+            "scheduled": totals["scheduled_today"] or 0,
+            "completed": totals["completed_today"] or 0,
+            "cancelled": totals["cancelled_today"] or 0,
+            "revenue_cents": totals["revenue_today_cents"] or 0
+        },
+        "month": {
+            "appointments": monthly["appointments_month"] or 0,
+            "revenue_cents": monthly["revenue_month_cents"] or 0
+        },
+        "base": {
+            "customers": counts["customers"],
+            "active_services": counts["active_services"],
+            "active_barbers": counts["active_barbers"]
+        }
+    }), 200
+
+
+@admin_bp.route("/appointments", methods=["GET"])
+@active_owner_required
+def list_appointments():
+    """Lista agendamentos da barbearia com filtros simples por data/status."""
+
+    from datetime import date
+
+    date_filter = request.args.get("date")
+    status_filter = request.args.get("status")
+
+    if date_filter:
+        try:
+            date.fromisoformat(date_filter)
+        except ValueError:
+            return jsonify({"error": "A data deve estar no formato AAAA-MM-DD."}), 400
+
+    allowed_statuses = {"scheduled", "completed", "cancelled"}
+    if status_filter and status_filter not in allowed_statuses:
+        return jsonify({"error": "Status de agendamento inválido."}), 400
+
+    conditions = ["appointments.barbershop_id = ?"]
+    params = [session["barbershop_id"]]
+
+    if date_filter:
+        conditions.append("date(appointments.starts_at) = ?")
+        params.append(date_filter)
+
+    if status_filter:
+        conditions.append("appointments.status = ?")
+        params.append(status_filter)
+
+    rows = get_db().execute(
+        f"""
+        SELECT appointments.id, appointments.service_name,
+               appointments.price_cents, appointments.duration_minutes,
+               appointments.starts_at, appointments.ends_at,
+               appointments.status, appointments.cancellation_reason,
+               customers.name AS customer_name,
+               users.name AS barber_name
+        FROM appointments
+        INNER JOIN customers
+          ON customers.id = appointments.customer_id
+         AND customers.barbershop_id = appointments.barbershop_id
+        LEFT JOIN users
+          ON users.id = appointments.barber_id
+         AND users.barbershop_id = appointments.barbershop_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY appointments.starts_at
+        LIMIT 500
+        """,
+        params
+    ).fetchall()
+
+    return jsonify({
+        "appointments": [
+            {
+                "id": row["id"],
+                "customer_name": row["customer_name"],
+                "barber_name": row["barber_name"],
+                "service_name": row["service_name"],
+                "price_cents": row["price_cents"],
+                "duration_minutes": row["duration_minutes"],
+                "starts_at": row["starts_at"],
+                "ends_at": row["ends_at"],
+                "status": row["status"],
+                "cancellation_reason": row["cancellation_reason"]
+            }
+            for row in rows
+        ]
+    }), 200
+
+
+@admin_bp.route("/appointments/<int:appointment_id>/cancel", methods=["POST"])
+@active_owner_required
+def cancel_appointment_admin(appointment_id):
+    """Permite ao proprietário cancelar um agendamento com motivo obrigatório."""
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Informe o motivo do cancelamento."}), 400
+
+    reason = str(data.get("reason", "")).strip()
+    if not reason or len(reason) > 250:
+        return jsonify({"error": "O motivo deve ter entre 1 e 250 caracteres."}), 400
+
+    db = get_db()
+    cursor = db.execute(
+        """
+        UPDATE appointments
+        SET status = 'cancelled',
+            cancellation_reason = ?,
+            cancelled_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND barbershop_id = ?
+          AND status = 'scheduled'
+        """,
+        (reason, appointment_id, session["barbershop_id"])
+    )
+    db.commit()
+
+    if cursor.rowcount == 0:
+        return jsonify({
+            "error": "Agendamento ativo não encontrado nesta barbearia."
+        }), 404
+
+    return jsonify({"message": "Agendamento cancelado com sucesso."}), 200
