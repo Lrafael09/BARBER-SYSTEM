@@ -47,6 +47,7 @@
 @media(max-width:900px){.hours-row{grid-template-columns:100px minmax(0,1fr)}.calendar-scroll{max-height:680px}}
 @media(max-width:760px){.agenda-filters{width:100%}.agenda-filters select{flex:1;min-width:0;max-width:none}.hours-row{grid-template-columns:1fr}.hours-day{display:flex;align-items:center;justify-content:space-between}.calendar-head-row,.calendar-body-row{grid-template-columns:58px repeat(var(--lane-count),minmax(175px,1fr))}.calendar-lane{min-width:175px}.layout{display:block}.sidebar{position:relative;height:auto;padding:10px;border-right:0;border-bottom:1px solid var(--line);gap:9px}.logo-line{padding:4px 7px 10px}.nav{display:flex;overflow:auto;gap:5px}.nav button{width:auto;white-space:nowrap;padding:9px 11px}.nav .nav-icon{display:none}.sidebar-foot{display:none}.main{padding:18px 12px 40px}.topbar{margin-bottom:18px}.day-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.field-grid.three,.goal-grid{grid-template-columns:1fr 1fr}.schedule-row{grid-template-columns:80px 55px repeat(2,minmax(0,1fr))}.schedule-row .optional{display:none}}
 @media(max-width:520px){.auth-grid,.field-grid,.field-grid.three,.field-grid.four,.goal-grid,.three-col{grid-template-columns:1fr}.metric-grid{grid-template-columns:1fr 1fr}.metric strong{font-size:20px}.panel{padding:14px}.section-head h1{font-size:23px}.day-grid{grid-template-columns:1fr}.list-row{align-items:flex-start;flex-direction:column}.weekday-row{grid-template-columns:82px repeat(2,minmax(0,1fr))}.week-controls input{max-width:100%}}
+.appointment-modal-backdrop{position:fixed;inset:0;z-index:50;background:#000b;display:grid;place-items:center;padding:18px}.appointment-modal{width:min(100%,520px);max-height:90vh;overflow:auto;background:#111713;border:1px solid #354137;border-radius:18px;padding:21px;box-shadow:0 20px 80px #000a}.appointment-modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.appointment-modal-actions button{flex:1;min-width:130px}.calendar-appointment{cursor:pointer}.calendar-appointment:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -191,6 +192,7 @@
   </main>
 </div>
 
+<div class="appointment-modal-backdrop hidden" id="appointment-modal"><section class="appointment-modal" role="dialog" aria-modal="true" aria-labelledby="appointment-modal-title"><div class="row"><div><div class="eyebrow">DETALHES DO AGENDAMENTO</div><h2 id="appointment-modal-title">Atendimento</h2></div><button class="ghost" id="close-appointment-modal">Fechar</button></div><p class="muted" id="appointment-modal-info"></p><div id="appointment-barber-editor"><label for="appointment-barber-select">Editar barbeiro</label><select id="appointment-barber-select"></select><button class="secondary" id="save-appointment-barber" style="margin-top:8px">Salvar barbeiro</button></div><div class="appointment-modal-actions" id="appointment-modal-actions"><button class="danger" id="appointment-cancel">Cancelar agendamento</button><button id="appointment-complete">Finalizar atendimento</button></div><div class="message" id="appointment-modal-message"></div></section></div>
 <script>
 (() => {
 const $ = id => document.getElementById(id);
@@ -200,6 +202,7 @@ let currentStaffId = null;
 let currentStaffName = '';
 let cachedStaff = [];
 let currentFinance = null;
+let selectedAppointment = null;
 const messages = ['overview','agenda','services','products','team','customers','finance','settings'];
 
 function showMessage(id, text, error=false){ const el=$(id); if(!el)return; el.textContent=text||''; el.classList.toggle('error',!!error); }
@@ -339,6 +342,21 @@ async function loadAgenda(){
  renderBusinessSchedule(schedule.days);
  renderBlocks(blocks.blocks);
 }
+function closeAppointmentModal(){ $('appointment-modal').classList.add('hidden'); selectedAppointment=null; }
+function openAppointmentModal(appointment){
+ selectedAppointment=appointment;$('appointment-modal-title').textContent=appointment.customer_name;
+ $('appointment-modal-info').textContent=appointment.service_name+' · '+money(appointment.price_cents)+' · '+appointment.starts_at.replace('T',' ')+' · '+(appointment.barber_name||'Sem barbeiro')+' · '+({scheduled:'Agendado',completed:'Concluído',cancelled:'Cancelado'}[appointment.status]||appointment.status);
+ const select=$('appointment-barber-select');select.replaceChildren(new Option('Sem profissional',''));
+ cachedStaff.filter(x=>x.is_active&&(x.role==='barber'||(x.role==='owner'&&x.can_serve))).forEach(x=>select.add(new Option(x.name,x.id)));
+ select.value=appointment.barber_id?String(appointment.barber_id):'';
+ const active=appointment.status==='scheduled';$('appointment-barber-editor').classList.toggle('hidden',!active);$('appointment-modal-actions').classList.toggle('hidden',!active);$('appointment-modal-message').textContent='';$('appointment-modal').classList.remove('hidden');
+}
+$('close-appointment-modal').addEventListener('click',closeAppointmentModal);
+$('appointment-modal').addEventListener('click',e=>{if(e.target===$('appointment-modal'))closeAppointmentModal();});
+$('appointment-complete').addEventListener('click',async()=>{if(!selectedAppointment)return;try{await api('/admin/appointments/'+selectedAppointment.id+'/complete',{method:'POST'});closeAppointmentModal();await loadAgenda();await loadOverview();}catch(e){showMessage('appointment-modal-message',e.message,true);}});
+$('appointment-cancel').addEventListener('click',async()=>{if(!selectedAppointment)return;const reason=prompt('Informe o motivo do cancelamento:');if(!reason)return;try{await api('/admin/appointments/'+selectedAppointment.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});closeAppointmentModal();await loadAgenda();await loadOverview();}catch(e){showMessage('appointment-modal-message',e.message,true);}});
+$('save-appointment-barber').addEventListener('click',async()=>{if(!selectedAppointment)return;try{await api('/admin/appointments/'+selectedAppointment.id+'/barber',{method:'PATCH',body:JSON.stringify({barber_id:$('appointment-barber-select').value?Number($('appointment-barber-select').value):null})});closeAppointmentModal();await loadAgenda();}catch(e){showMessage('appointment-modal-message',e.message,true);}});
+
 function renderDailyCalendar(appointments,selectedDate,businessDays,staff){
  const root=$('day-calendar');root.replaceChildren();
  const selected= $('agenda-professional').value;
@@ -385,6 +403,9 @@ function renderDailyCalendar(appointments,selectedDate,businessDays,staff){
    const startAt=clockMinutes(a.starts_at.slice(11,16));const endAt=clockMinutes(a.ends_at.slice(11,16));
    const duration=Math.max(5,endAt-startAt);const card=document.createElement('article');
    card.className='calendar-appointment '+(a.status==='completed'?'completed':a.status==='cancelled'?'cancelled':'');
+   card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Abrir agendamento de '+a.customer_name);
+   card.addEventListener('click',()=>openAppointmentModal(a));
+   card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openAppointmentModal(a);}});
    card.style.top=Math.max(0,(startAt-start)*pxPerMinute)+'px';card.style.height=Math.max(28,duration*pxPerMinute)+'px';
    card.title=a.customer_name+' · '+a.service_name+' · '+a.starts_at.slice(11,16)+'–'+a.ends_at.slice(11,16);
    const time=document.createElement('span');time.className='appt-time';time.textContent=a.starts_at.slice(11,16)+' – '+a.ends_at.slice(11,16);
