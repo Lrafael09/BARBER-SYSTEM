@@ -263,7 +263,7 @@ function renderWeek(appointments,monday){
  for(let i=0;i<7;i++){
   const day=new Date(monday);day.setDate(day.getDate()+i);const key=toLocalInputDate(day);
   const col=document.createElement('div');col.className='day-col';if(key===toLocalInputDate(new Date()))col.classList.add('today');
-  const h=document.createElement('h3');h.textContent=weekdays[i];const num=document.createElement('span');num.textContent=day.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});h.append(num);col.append(h);
+  const h=document.createElement('h3');h.textContent=weekdays[i];h.title='Clique para configurar funcionamento ou folga';h.style.cursor='pointer';h.addEventListener('click',()=>{const target=document.querySelector('#business-schedule .schedule-row[data-day="'+i+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.querySelector('.day-open').focus();}});const num=document.createElement('span');num.textContent=day.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});h.append(num);col.append(h);
   const found=appointments.filter(a=>a.starts_at.slice(0,10)===key);
   if(!found.length)col.append(empty('Sem atendimentos'));
   found.forEach(a=>{
