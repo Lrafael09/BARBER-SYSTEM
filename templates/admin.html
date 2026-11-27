@@ -6,7 +6,7 @@
 <style>
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0b0b0b;color:#f5f5f5}
 *{box-sizing:border-box}body{margin:0;padding:24px 16px 50px}main{max-width:1100px;margin:auto}
-.brand{font-size:12px;letter-spacing:.17em;color:#a8f05a}h1{font-size:34px;margin:10px 0}p{color:#aaa}
+.brand{font-size:12px;letter-spacing:.17em;color:#a8f05a}h1{font-size:34px;margin:10px 0}h2{margin:4px 0 12px}p{color:#aaa}
 .card{background:#151515;border:1px solid #292929;border-radius:15px;padding:18px;margin:15px 0}
 label{display:block;color:#bbb;font-size:13px;margin:12px 0 6px}
 input,select,button{padding:12px;border-radius:10px;border:1px solid #3b3b3b;background:#0c0c0c;color:white;font:inherit;width:100%}
@@ -17,17 +17,37 @@ button.secondary{background:#282828;color:#eee;border:1px solid #444}
 .row{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 .filters{display:flex;gap:8px;flex-wrap:wrap}.filters input,.filters select{width:auto;min-width:150px}
 .item{padding:13px 0;border-bottom:1px solid #303030}.muted{color:#999;font-size:13px}.message{color:#a8f05a;white-space:pre-wrap;margin-top:10px}
-.hidden{display:none}.columns{display:grid;grid-template-columns:1.4fr 1fr;gap:15px}
-@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.columns{grid-template-columns:1fr}}
+.error{color:#ff8585}.hidden{display:none}.columns{display:grid;grid-template-columns:1.4fr 1fr;gap:15px}
+.auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.auth-card{margin-top:18px}
+@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.columns,.auth-grid{grid-template-columns:1fr}}
 @media(max-width:430px){.grid{grid-template-columns:1fr 1fr}.metric strong{font-size:20px}}
 </style></head>
 <body><main>
 <div class="brand">BARBER-SYSTEM / ADMINISTRAÇÃO</div>
-<section class="card" id="login-card">
-<h1>Acesso do proprietário</h1><p>Entre com o e-mail e a senha cadastrados na criação da barbearia.</p>
-<label for="email">E-mail</label><input id="email" type="email" autocomplete="username">
-<label for="password">Senha</label><input id="password" type="password" autocomplete="current-password">
-<button id="login">Entrar no painel</button><div id="login-message" class="message" role="status"></div>
+<section id="access-area" class="auth-grid">
+<section class="card auth-card" id="register-card">
+<div class="brand">PRIMEIRO ACESSO</div><h1>Criar minha barbearia</h1>
+<p>Cadastre os dados do proprietário. Este cadastro só pode ser feito uma vez nesta instalação.</p>
+<form id="register-form">
+<label for="shop-name">Nome da barbearia</label><input id="shop-name" maxlength="120" required placeholder="Ex.: Barbearia do João">
+<label for="owner-name">Nome do proprietário</label><input id="owner-name" maxlength="120" required autocomplete="name" placeholder="Seu nome">
+<label for="register-email">E-mail</label><input id="register-email" type="email" maxlength="254" required autocomplete="email" placeholder="seu@email.com">
+<label for="register-password">Criar senha</label><input id="register-password" type="password" minlength="8" required autocomplete="new-password" placeholder="Mínimo de 8 caracteres">
+<label for="whatsapp">WhatsApp (opcional)</label><input id="whatsapp" type="tel" placeholder="DDD + número">
+<button type="submit">Criar conta e barbearia</button>
+<div id="register-message" class="message" role="status"></div>
+</form>
+</section>
+<section class="card auth-card" id="login-card">
+<div class="brand">JÁ POSSUI CADASTRO?</div><h1>Acesso do proprietário</h1>
+<p>Entre com o e-mail e a senha cadastrados anteriormente.</p>
+<form id="login-form">
+<label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" required>
+<button type="submit">Entrar no painel</button>
+<div id="login-message" class="message" role="status"></div>
+</form>
+</section>
 </section>
 <section id="dashboard" class="hidden">
 <div class="row"><div><h1 id="welcome">Painel administrativo</h1><p>Resumo e agenda da sua barbearia.</p></div><button class="secondary" id="logout" style="width:auto">Sair</button></div>
@@ -56,10 +76,15 @@ async function request(path,options={}) {
 }
 function money(cents){return 'R$ '+(cents/100).toFixed(2).replace('.',',');}
 function metric(label,value){const card=document.createElement('div');card.className='metric';const span=document.createElement('span');span.textContent=label;const strong=document.createElement('strong');strong.textContent=value;card.append(span,strong);return card;}
+function showMessage(id,message,isError=false){$(id).textContent=message;$(id).classList.toggle('error',isError);}
+async function loadRegistrationStatus(){
+ const status=await request('/auth/registration-status');
+ $('register-card').classList.toggle('hidden',!status.available);
+}
 async function loadDashboard(){
  const [me,dash]=await Promise.all([request('/auth/me'),request('/admin/dashboard')]);
  $('welcome').textContent='Olá, '+me.name;
- $('public-link').href='/b/'+encodeURIComponent((await request('/auth/me')).barbershop_slug||'');
+ $('public-link').href='/b/'+encodeURIComponent(me.barbershop_slug||'')+'/book';
  const metrics=$('metrics');metrics.replaceChildren(
   metric('Agendamentos hoje',dash.today.appointments),
   metric('Pendentes',dash.today.scheduled),
@@ -70,7 +95,7 @@ async function loadDashboard(){
   metric('Serviços ativos',dash.base.active_services),
   metric('Profissionais ativos',dash.base.active_barbers)
  );
- $('dashboard').classList.remove('hidden');$('login-card').classList.add('hidden');
+ $('dashboard').classList.remove('hidden');$('access-area').classList.add('hidden');
  await loadAppointments();await loadServices();
 }
 async function loadAppointments(){
@@ -86,7 +111,7 @@ async function loadAppointments(){
    const cancel=document.createElement('button');cancel.className='secondary';cancel.textContent='Cancelar agendamento';cancel.addEventListener('click',async()=>{
     const reason=prompt('Motivo do cancelamento:');if(!reason)return;
     try{await request('/admin/appointments/'+a.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});await loadAppointments();}
-    catch(e){$('agenda-message').textContent=e.message;}
+    catch(e){showMessage('agenda-message',e.message,true);}
    });item.appendChild(cancel);
   }
   root.appendChild(item);
@@ -97,12 +122,34 @@ async function loadServices(){
  if(!data.services.length){root.textContent='Nenhum serviço cadastrado.';return;}
  data.services.forEach(s=>{const line=document.createElement('div');line.textContent=s.name+' — '+money(s.price_cents)+' — '+s.duration_minutes+' min'+(s.is_active?'':' (inativo)');line.style.padding='7px 0';root.appendChild(line);});
 }
-$('login').addEventListener('click',async()=>{
- try{await request('/auth/login',{method:'POST',body:JSON.stringify({email:$('email').value,password:$('password').value})});await loadDashboard();}
- catch(e){$('login-message').textContent=e.message;}
+$('register-form').addEventListener('submit',async event=>{
+ event.preventDefault();showMessage('register-message','Criando sua conta...');
+ try{
+  const data=await request('/auth/register',{method:'POST',body:JSON.stringify({
+   shop_name:$('shop-name').value,owner_name:$('owner-name').value,
+   email:$('register-email').value,password:$('register-password').value,
+   whatsapp:$('whatsapp').value
+  })});
+  $('email').value=$('register-email').value;
+  $('password').value='';
+  $('register-form').reset();
+  await loadRegistrationStatus();
+  showMessage('login-message','Cadastro concluído! Agora entre com seu e-mail e senha.');
+  $('password').focus();
+ }catch(e){showMessage('register-message',e.message,true);}
 });
-$('logout').addEventListener('click',async()=>{await fetch('/auth/logout',{method:'POST'});$('dashboard').classList.add('hidden');$('login-card').classList.remove('hidden');});
-$('load-appointments').addEventListener('click',()=>loadAppointments().catch(e=>$('agenda-message').textContent=e.message));
+$('login-form').addEventListener('submit',async event=>{
+ event.preventDefault();
+ try{await request('/auth/login',{method:'POST',body:JSON.stringify({email:$('email').value,password:$('password').value})});await loadDashboard();}
+ catch(e){showMessage('login-message',e.message,true);}
+});
+$('logout').addEventListener('click',async()=>{
+ await fetch('/auth/logout',{method:'POST'});
+ $('dashboard').classList.add('hidden');$('access-area').classList.remove('hidden');
+ $('login-message').textContent='Você saiu da sua conta.';
+ await loadRegistrationStatus();
+});
+$('load-appointments').addEventListener('click',()=>loadAppointments().catch(e=>showMessage('agenda-message',e.message,true)));
 $('add-service').addEventListener('click',async()=>{
  try{
   await request('/admin/services',{method:'POST',body:JSON.stringify({
@@ -111,8 +158,9 @@ $('add-service').addEventListener('click',async()=>{
   })});
   $('service-message').textContent='Serviço cadastrado.';$('service-name').value='';$('service-price').value='';$('service-description').value='';
   await loadServices();
- }catch(e){$('service-message').textContent=e.message;}
+ }catch(e){showMessage('service-message',e.message,true);}
 });
+loadRegistrationStatus().catch(e=>showMessage('login-message',e.message,true));
 loadDashboard().catch(()=>{});
 })();
 </script></body></html>
