@@ -6,6 +6,8 @@ test("painel administrativo é estático e usa a API do Worker", () => {
   assert.match(ADMIN_PAGE, /fetch\('\/api'\+path/);
   assert.match(ADMIN_PAGE, /\/admin\/finance\/config/);
   assert.match(ADMIN_PAGE, /\/admin\/appointments/);
+  assert.match(ADMIN_PAGE, /Adicionar à fila/);
+  assert.match(ADMIN_PAGE, /walk_in/);
   assert.doesNotMatch(ADMIN_PAGE, /\{\{|\{%/);
 });
 
@@ -21,5 +23,7 @@ test("agendamento público resolve a barbearia pela URL e usa a API pública", (
   assert.match(BOOKING_PAGE, /location\.pathname/);
   assert.match(BOOKING_PAGE, /\/customers\/lookup/);
   assert.match(BOOKING_PAGE, /\/availability\?/);
+  assert.match(BOOKING_PAGE, /ordem de chegada/);
+  assert.match(BOOKING_PAGE, /isSaturdaySelected/);
   assert.doesNotMatch(BOOKING_PAGE, /\{\{|\{%/);
 });
