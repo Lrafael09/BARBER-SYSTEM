@@ -14,3 +14,4 @@ database_id = "53d9a582-60db-4382-af64-ad19a295de2a"
 
 [vars]
 ENVIRONMENT = "production"
+OWNER_REGISTRATION_ENABLED = "true"
