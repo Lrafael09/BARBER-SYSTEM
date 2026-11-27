@@ -1,103 +1,130 @@
 # BARBER-SYSTEM
 
-Sistema web de agendamento para barbearias pequenas, com separação de dados por barbearia.
+Sistema de gestão e agendamento para barbearias pequenas. Cada instalação atende uma barbearia, com banco de dados separado.
 
-## Estado atual
+## Ambientes incluídos
 
-O projeto contém a base Flask/SQLite, cadastro e login do proprietário, cadastro de barbeiros por PIN, serviços, horários semanais, bloqueios, agendamento público, cancelamentos e páginas web iniciais para cliente, barbeiro e proprietário.
+### Página pública do cliente
+- Identificação de primeira visita ou cliente recorrente.
+- Cadastro de nome e telefone.
+- Seleção de serviço, profissional, data e horário disponível.
+- Confirmação do agendamento e atalho para WhatsApp.
+- Logo, cor de destaque e tema claro/escuro configuráveis.
+- Alternância de tema claro/escuro na própria página.
 
-**Ainda não considere esta versão pronta para receber clientes reais.** A aplicação precisa passar pelos testes, revisão de segurança e configuração de hospedagem persistente antes da publicação.
+A busca por quatro últimos dígitos ajuda a localizar um cadastro, mas não comprova a identidade do cliente. Não use essa etapa como autenticação forte para dados sensíveis.
+
+### Painel do proprietário
+- Cadastro inicial único e login.
+- Visão geral com indicadores de agendamentos, clientes, serviços e profissionais.
+- Agenda semanal com filtros de status e ações para concluir/cancelar atendimentos.
+- Expediente semanal da barbearia, incluindo intervalo.
+- Bloqueios gerais ou individuais.
+- Cadastro, edição e ativação de serviços.
+- Cadastro, edição e ativação de produtos.
+- Gestão de colaboradores com PIN de quatro números.
+- Opção para o proprietário aparecer como profissional, usando PIN próprio.
+- Horários individuais por profissional.
+- Consulta de clientes.
+- Livro-caixa com entradas, despesas, histórico e resultado.
+- Metas diárias, semanais e mensais com progresso.
+
+O faturamento de atendimentos é registrado no caixa quando o atendimento é concluído. Entradas e saídas adicionais podem ser lançadas manualmente.
+
+### Área do colaborador
+- Link único por barbearia.
+- Seleção do próprio nome e autenticação por PIN de quatro números.
+- Agenda individual, sem exibir a agenda dos demais profissionais.
+- Conclusão e cancelamento dos próprios atendimentos.
+- A conclusão gera uma entrada no financeiro da barbearia.
 
 ## Executar localmente
 
 Requer Python 3.10 ou superior.
 
-```bash
-python -m venv .venv
-```
-
-No Windows:
+No terminal, na pasta do projeto:
 
 ```powershell
+python -m venv .venv
 .venv\Scripts\activate
 python -m pip install -r requirements.txt
 python app.py
 ```
 
-Abra `http://127.0.0.1:5000/health` para verificar a aplicação e o SQLite.
+Abra:
+- Painel: http://127.0.0.1:5000/admin/panel
+- Saúde da aplicação: http://127.0.0.1:5000/health
 
-## Executar os testes
+## Banco de dados de demonstração
 
-Na raiz do repositório:
+Para testar sem modificar o banco normal, use um arquivo separado:
 
-```bash
+```powershell
+$env:BARBER_DATABASE = "instance\barber-demo.db"
+python app.py
+```
+
+Para voltar ao banco padrão na mesma janela PowerShell:
+
+```powershell
+Remove-Item Env:BARBER_DATABASE
+```
+
+Não apague o arquivo `instance\barber.db` se ele contiver cadastros que deseja preservar.
+
+## Testes automáticos
+
+```powershell
 python -m unittest discover -s tests -v
 ```
 
-Os testes usam um banco temporário e não devem alterar o banco local normal.
-
-## Páginas
-
-- Página pública de agendamento: `/b/SLUG/book`
-- Painel do proprietário: `/admin/panel`
-- Área do barbeiro: `/barber/SLUG`
-- Verificação da aplicação: `/health`
-
-O proprietário cria a conta pela API `POST /auth/register`. O barbeiro é cadastrado no painel/API do proprietário e recebe seu identificador e PIN.
+O GitHub Actions executa os mesmos testes automaticamente em novos commits para a branch principal.
 
 ## Rotas principais
 
 ### Proprietário
-- `POST /auth/register` — cadastro inicial da barbearia e proprietário.
-- `POST /auth/login` — login.
-- `GET /admin/dashboard` — resumo do painel.
-- `GET|POST /admin/services` — listar e cadastrar serviços.
-- `PATCH|DELETE /admin/services/<id>` — editar ou desativar serviço.
-- `GET|PUT /admin/schedule` — consultar e salvar expediente semanal.
-- `GET|POST /admin/blocks` — consultar e criar bloqueios.
-- `GET /admin/appointments` — consultar agenda.
-- `POST /admin/appointments/<id>/cancel` — cancelar com motivo.
+- `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`
+- `GET /admin/dashboard`, `GET /admin/appointments`
+- `GET|POST /admin/services`, `PATCH|DELETE /admin/services/<id>`
+- `GET|POST /admin/products`, `PATCH|DELETE /admin/products/<id>`
+- `GET|PUT /admin/schedule`
+- `GET|POST /admin/blocks`, `DELETE /admin/blocks/<id>`
+- `GET|POST /admin/barbers`, `PATCH|DELETE /admin/barbers/<id>`
+- `GET|PUT /admin/staff/<id>/schedule`, `PATCH /admin/staff/owner`
+- `GET /admin/customers`
+- `GET|POST /admin/finance/entries`, `DELETE /admin/finance/entries/<id>`
+- `GET /admin/finance/summary`, `PUT /admin/finance/goals`
+- `GET /admin/barbershop`, `POST /admin/barbershop/settings`, `POST /admin/barbershop/logo`
 
-### Barbeiro
-- `POST /barber/<slug>/<barber_id>/login` — login por PIN.
-- `GET /barber/appointments` — agenda individual.
-- `POST /barber/appointments/<id>/complete` — concluir atendimento.
-- `POST /barber/appointments/<id>/cancel` — cancelar com motivo.
+### Colaborador
+- `GET /barber/<slug>/staff`
+- `POST /barber/<slug>/login`
+- `GET /barber/appointments`
+- `POST /barber/appointments/<id>/complete`
+- `POST /barber/appointments/<id>/cancel`
+- `POST /barber/logout`
 
 ### Cliente
-- `GET /b/<slug>/book` — interface pública.
-- `GET /b/<slug>/catalog` — serviços e profissionais ativos.
-- `GET /b/<slug>/availability` — horários livres calculados.
-- `POST /b/<slug>/customers/lookup` — localizar por quatro últimos dígitos.
-- `POST /b/<slug>/customers` — cadastrar cliente.
-- `POST /b/<slug>/appointments` — reservar horário.
-- `POST /b/<slug>/appointments/<id>/cancel` — cancelar usando telefone como conferência.
+- `GET /b/<slug>/book`
+- `GET /b/<slug>/catalog`
+- `GET /b/<slug>/availability`
+- `POST /b/<slug>/customers`
+- `POST /b/<slug>/customers/lookup`
+- `POST /b/<slug>/customers/confirm`
+- `POST /b/<slug>/appointments`
 
-## Configuração de produção
+## Modelo de instalação
 
-Defina pelo ambiente, nunca diretamente no código:
+Uma instalação corresponde a uma barbearia e tem o próprio arquivo de banco. O primeiro cadastro cria o proprietário. Para impedir um novo cadastro inicial nessa instalação, altere `OWNER_REGISTRATION_ENABLED` para `False` em `app.py`.
 
-- `APP_ENV=production`
-- `SECRET_KEY` com valor aleatório, longo e exclusivo.
-- `PORT` conforme a plataforma de hospedagem.
+## Antes de usar com clientes reais
 
-Em produção, o código exige `SECRET_KEY`, desativa o modo debug e marca o cookie de sessão como Secure. Use HTTPS.
+Esta versão amplia bastante as funções do sistema, mas ainda precisa ser validada no ambiente de execução que será usado pela barbearia. Antes de produção:
+1. Execute os testes automáticos e faça testes manuais dos três ambientes.
+2. Configure uma `SECRET_KEY` forte, HTTPS e servidor WSGI; nunca use o servidor de desenvolvimento em produção.
+3. Configure armazenamento persistente e backups do banco de dados.
+4. Implemente proteção CSRF, autenticação forte para clientes, recuperação de conta e limites de tentativa para o login do proprietário.
+5. Revise privacidade, fuso horário da barbearia e regras legais de tratamento dos dados dos clientes.
+6. Teste agendamentos simultâneos, cancelamentos, intervalos, bloqueios e disponibilidade individual em datas de fronteira.
 
-O banco SQLite precisa estar em armazenamento persistente e com backup. Sistemas de hospedagem com disco efêmero podem apagar o banco em reinicializações ou novos deploys.
-
-## Pendências importantes antes de produção
-
-1. Implementar proteção CSRF nos endpoints que alteram dados e usam sessão.
-2. Adicionar autenticação forte do cliente para consulta/cancelamento; quatro dígitos ou telefone digitado não comprovam identidade.
-3. Definir e aplicar fuso horário da barbearia em todos os cálculos de agenda e relatórios.
-4. Revisar isolamento multi-barbearia com chaves estrangeiras compostas ou validações adicionais em todas as operações.
-5. Adicionar limite de tentativas ao login do proprietário e proteção adicional ao PIN.
-6. Testar conflitos simultâneos, cancelamentos, horários de almoço, bloqueios e cenários de fronteira.
-7. Configurar servidor WSGI, HTTPS, backups, logs e monitoramento na hospedagem escolhida.
-8. Completar telas de cadastro inicial, gerenciamento de equipe, expediente e edição de serviços.
-
-## Observações de segurança e privacidade
-
-A página pública mascara nomes na busca de clientes, mas a seleção por quatro últimos dígitos é apenas uma forma de localizar um cadastro. O painel do barbeiro não retorna telefone do cliente. O proprietário tem acesso aos dados completos conforme as rotas administrativas atuais.
-
-O faturamento do dashboard é uma soma simples dos serviços marcados como concluídos; não representa ainda um caixa financeiro completo, com despesas, taxas, comissões e conciliação de pagamentos.
+O projeto não deve ser considerado pronto para receber dados reais até essas verificações serem concluídas.
