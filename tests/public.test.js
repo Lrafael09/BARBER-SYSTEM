@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizePhone, maskCustomerName, parseDate, parseClock } from "../cloudflare/public.js";
+import { normalizePhone, maskCustomerName, parseDate, parseClock, saoPauloDateTime } from "../cloudflare/public.js";
 
 test("normaliza telefone mantendo apenas dígitos", () => {
   assert.equal(normalizePhone("(11) 98765-4321"), "11987654321");
@@ -23,4 +23,10 @@ test("converte horários e rejeita formatos inválidos", () => {
   assert.equal(parseClock("18:00"), 1080);
   assert.equal(parseClock("24:00"), null);
   assert.equal(parseClock("9:30"), null);
+});
+
+test("calcula data e horário no fuso de Brasília, não no UTC", () => {
+  assert.deepEqual(saoPauloDateTime(new Date("2026-11-27T15:00:00.000Z")), {
+    date: "2026-11-27", time: "12:00", minutes: 720
+  });
 });

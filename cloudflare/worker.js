@@ -38,10 +38,10 @@ async function readSession(request, env) {
   ).bind(sid).first();
 }
 
-async function recordFailedPinAttempt(env, scopeKey, now) {
+async function recordFailedPinAttempt(env, scopeKey, now, maxAttempts = 5) {
   await env.DB.prepare(
-    "INSERT INTO login_attempts(scope_key,failed_attempts,window_started_at,locked_until) VALUES(?,1,?,NULL) ON CONFLICT(scope_key) DO UPDATE SET failed_attempts=CASE WHEN excluded.window_started_at-login_attempts.window_started_at>=900 THEN 1 ELSE login_attempts.failed_attempts+1 END,window_started_at=CASE WHEN excluded.window_started_at-login_attempts.window_started_at>=900 THEN excluded.window_started_at ELSE login_attempts.window_started_at END,locked_until=CASE WHEN (CASE WHEN excluded.window_started_at-login_attempts.window_started_at>=900 THEN 1 ELSE login_attempts.failed_attempts+1 END)>=5 THEN excluded.window_started_at+900 ELSE NULL END"
-  ).bind(scopeKey, now).run();
+    "INSERT INTO login_attempts(scope_key,failed_attempts,window_started_at,locked_until) VALUES(?,1,?,NULL) ON CONFLICT(scope_key) DO UPDATE SET failed_attempts=CASE WHEN excluded.window_started_at-login_attempts.window_started_at>=900 THEN 1 ELSE login_attempts.failed_attempts+1 END,window_started_at=CASE WHEN excluded.window_started_at-login_attempts.window_started_at>=900 THEN excluded.window_started_at ELSE login_attempts.window_started_at END,locked_until=CASE WHEN (CASE WHEN excluded.window_started_at-login_attempts.window_started_at>=900 THEN 1 ELSE login_attempts.failed_attempts+1 END)>=? THEN excluded.window_started_at+900 ELSE NULL END"
+  ).bind(scopeKey, now, maxAttempts).run();
   return await env.DB.prepare(
     "SELECT failed_attempts,locked_until FROM login_attempts WHERE scope_key=?"
   ).bind(scopeKey).first();
@@ -58,59 +58,97 @@ async function api(request, env, url) {
   if(url.pathname==="/api/auth/registration-status"&&request.method==="GET"){
    return json({available:env.OWNER_REGISTRATION_ENABLED==="true"});
   }
-  if(url.pathname==="/api/auth/register"&&request.method==="POST"){
-   const d=await request.json().catch(()=>null); if(!d)return json({error:"Envie os dados em JSON."},400);
-   const shop=String(d.shop_name||"").trim(),name=String(d.owner_name||"").trim(),email=String(d.email||"").trim().toLowerCase(),pass=d.password,wa=String(d.whatsapp||"").replace(/\D/g,"");
-   if(!shop||!name||!email||!pass||!wa)return json({error:"Preencha todos os campos, inclusive o WhatsApp."},400);
-   if(shop.length>120||name.length>120||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||wa.length<10||wa.length>13)return json({error:"Confira o nome, e-mail e WhatsApp informado."},400);
-   if(typeof pass!=="string"||pass.length<8)return json({error:"A senha deve ter pelo menos 8 caracteres."},400);
-   if(env.OWNER_REGISTRATION_ENABLED!=="true")return json({error:"Novos cadastros estão temporariamente desativados."},403);
-   const emailUsed=await env.DB.prepare("SELECT id FROM users WHERE lower(email)=? AND role='owner' LIMIT 1").bind(email).first();
-   if(emailUsed)return json({error:"Este e-mail já possui uma conta. Use outro e-mail ou entre no painel."},409);
-   const shopCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM barbershops").first();
-   const userCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
-   let legacy=null;
-   if(shopCount.n===1&&userCount.n===0)legacy=await env.DB.prepare("SELECT id FROM barbershops ORDER BY id LIMIT 1").first();
-   const phoneUsed=await env.DB.prepare("SELECT id FROM barbershops WHERE whatsapp=? AND id<>? LIMIT 1").bind(wa,legacy?.id||0).first();
-   if(phoneUsed)return json({error:"Este WhatsApp já está vinculado a uma barbearia. Use outro número."},409);
-   const base=shop.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
-   if(!base)return json({error:"Nome inválido para endereço."},400);
-   let slug=base,i=2;
-   while(await env.DB.prepare("SELECT id FROM barbershops WHERE slug=? AND id<>?").bind(slug,legacy?.id||0).first())slug=base+"-"+i++;
-   let barbershopId,createdNewShop=false;
-   if(legacy){
-    barbershopId=legacy.id;
-   }else{
-    const created=await env.DB.prepare("INSERT INTO barbershops(name,slug,whatsapp) VALUES(?,?,?)").bind(shop,slug,wa).run();
-    barbershopId=created.meta.last_row_id;createdNewShop=true;
-   }
-   try{
-    const passwordHash=await hashPassword(pass);
-    await env.DB.prepare("INSERT INTO users(barbershop_id,name,email,password_hash,role,can_serve) VALUES(?,?,?,?,'owner',0)").bind(barbershopId,name,email,passwordHash).run();
-    if(!createdNewShop){
-     await env.DB.prepare("UPDATE barbershops SET name=?,slug=?,whatsapp=? WHERE id=?").bind(shop,slug,wa,barbershopId).run();
+  if (url.pathname === "/api/auth/register" && request.method === "POST") {
+    if (env.OWNER_REGISTRATION_ENABLED !== "true") return json({ error: "Novos cadastros estão temporariamente desativados." }, 403);
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+    const rateKey = "owner-register:" + ip;
+    const now = Math.floor(Date.now() / 1000);
+    const current = await env.DB.prepare("SELECT failed_attempts,locked_until FROM login_attempts WHERE scope_key=?").bind(rateKey).first();
+    if (current?.locked_until && current.locked_until > now) return json({ error: "Muitas tentativas de cadastro. Aguarde 15 minutos e tente novamente." }, 429);
+    const attempt = await recordFailedPinAttempt(env, rateKey, now, 10);
+    if (attempt?.locked_until && attempt.locked_until > now) return json({ error: "Limite de cadastros atingido. Aguarde 15 minutos e tente novamente." }, 429);
+
+    const d = await request.json().catch(() => null);
+    if (!d || typeof d !== "object") return json({ error: "Envie os dados em JSON." }, 400);
+    const shop = String(d.shop_name || "").trim();
+    const name = String(d.owner_name || "").trim();
+    const email = String(d.email || "").trim().toLowerCase();
+    const pass = d.password;
+    const wa = String(d.whatsapp || "").replace(/\D/g, "");
+    if (!shop || !name || !email || !pass || !wa) return json({ error: "Preencha todos os campos, inclusive o WhatsApp." }, 400);
+    if (shop.length > 120 || name.length > 120 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || wa.length < 10 || wa.length > 13) {
+      return json({ error: "Confira o nome, e-mail e WhatsApp informado." }, 400);
     }
-   }catch(error){
-    console.error("BARBER_REGISTER_FAILED", { name: error?.name, message: error?.message, stack: error?.stack });
-    if(createdNewShop)await env.DB.prepare("DELETE FROM barbershops WHERE id=? AND NOT EXISTS (SELECT 1 FROM users WHERE barbershop_id=?)").bind(barbershopId,barbershopId).run();
-    if(String(error?.message||"").toLowerCase().includes("unique"))return json({error:"Este e-mail ou WhatsApp já está em uso, ou esta barbearia já possui proprietário. Confira os dados e tente novamente."},409);
-    throw error;
-   }
-   return json({message:"Barbearia cadastrada com sucesso. Agora entre com seu e-mail e senha.",barbershop:{id:barbershopId,name:shop,slug}},201);
+    if (typeof pass !== "string" || pass.length < 8 || pass.length > 128) return json({ error: "A senha deve ter entre 8 e 128 caracteres." }, 400);
+
+    let barbershopId = null;
+    let createdNewShop = false;
+    try {
+      const emailUsed = await env.DB.prepare("SELECT id FROM users WHERE lower(email)=? AND role='owner' LIMIT 1").bind(email).first();
+      if (emailUsed) return json({ error: "Este e-mail já possui uma conta. Use outro e-mail ou entre no painel." }, 409);
+      const shopCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM barbershops").first();
+      const userCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
+      let legacy = null;
+      if (shopCount.n === 1 && userCount.n === 0) legacy = await env.DB.prepare("SELECT id FROM barbershops ORDER BY id LIMIT 1").first();
+      const phoneUsed = await env.DB.prepare("SELECT id FROM barbershops WHERE whatsapp=? AND id<>? LIMIT 1").bind(wa, legacy?.id || 0).first();
+      if (phoneUsed) return json({ error: "Este WhatsApp já está vinculado a uma barbearia. Use outro número." }, 409);
+      const base = shop.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      if (!base) return json({ error: "Nome inválido para endereço." }, 400);
+      let slug = base, suffix = 2;
+      while (await env.DB.prepare("SELECT id FROM barbershops WHERE slug=? AND id<>?").bind(slug, legacy?.id || 0).first()) slug = base + "-" + suffix++;
+      const passwordHash = await hashPassword(pass);
+      if (legacy) {
+        barbershopId = legacy.id;
+        await env.DB.batch([
+          env.DB.prepare("UPDATE barbershops SET name=?,slug=?,whatsapp=? WHERE id=?").bind(shop, slug, wa, barbershopId),
+          env.DB.prepare("INSERT INTO users(barbershop_id,name,email,password_hash,role,can_serve) VALUES(?,?,?,?,'owner',0)").bind(barbershopId, name, email, passwordHash)
+        ]);
+      } else {
+        const created = await env.DB.prepare("INSERT INTO barbershops(name,slug,whatsapp) VALUES(?,?,?)").bind(shop, slug, wa).run();
+        barbershopId = created.meta.last_row_id;
+        createdNewShop = true;
+        await env.DB.prepare("INSERT INTO users(barbershop_id,name,email,password_hash,role,can_serve) VALUES(?,?,?,?,'owner',0)").bind(barbershopId, name, email, passwordHash).run();
+      }
+    } catch (error) {
+      console.error("BARBER_REGISTER_FAILED", { name: error?.name, message: error?.message, stack: error?.stack });
+      if (createdNewShop && barbershopId) {
+        try {
+          await env.DB.prepare("DELETE FROM barbershops WHERE id=? AND NOT EXISTS (SELECT 1 FROM users WHERE barbershop_id=?)").bind(barbershopId, barbershopId).run();
+        } catch (cleanupError) {
+          console.error("BARBER_REGISTER_CLEANUP_FAILED", { name: cleanupError?.name, message: cleanupError?.message });
+        }
+      }
+      if (String(error?.message || "").toLowerCase().includes("unique")) return json({ error: "Este e-mail, WhatsApp ou endereço já está em uso. Confira os dados e tente novamente." }, 409);
+      return json({ error: "Não foi possível concluir o cadastro agora. Tente novamente em alguns instantes. Seus dados não foram confirmados." }, 503);
+    }
+    return json({ message: "Barbearia cadastrada com sucesso. Agora entre com seu e-mail e senha.", barbershop: { id: barbershopId, name: shop, slug } }, 201);
   }
 
-if(url.pathname==="/api/auth/login"&&request.method==="POST"){
-   const d=await request.json().catch(()=>null);if(!d)return json({error:"Informe e-mail e senha."},400);
-   const email=String(d.email||"").trim().toLowerCase();
-   const u=await env.DB.prepare("SELECT u.id,u.barbershop_id,u.name,u.email,u.password_hash,u.role,u.is_active,b.name AS shop_name,b.slug AS shop_slug FROM users u JOIN barbershops b ON b.id=u.barbershop_id WHERE u.email=? AND u.role='owner'").bind(email).first();
-   if(!u||!u.is_active||!await verifyPassword(u.password_hash,d.password||""))return json({error:"E-mail ou senha incorretos."},401);
-   if(needsPasswordRehash(u.password_hash)) {
-    await env.DB.prepare("UPDATE users SET password_hash=? WHERE id=?").bind(await hashPassword(d.password),u.id).run();
-   }
-   const sid=await createSession(env,u,"owner");
-   return json({message:"Login realizado com sucesso.",user:{id:u.id,name:u.name,email:u.email,role:u.role},barbershop:{id:u.barbershop_id,name:u.shop_name,slug:u.shop_slug}},200,{"set-cookie":sessionCookie(sid)});
+  if (url.pathname === "/api/auth/login" && request.method === "POST") {
+    const d = await request.json().catch(() => null);
+    if (!d || typeof d !== "object") return json({ error: "Informe e-mail e senha." }, 400);
+    const email = String(d.email || "").trim().toLowerCase();
+    const password = typeof d.password === "string" ? d.password : "";
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+    const rateKey = "owner-login:" + ip + ":" + email;
+    const now = Math.floor(Date.now() / 1000);
+    const current = await env.DB.prepare("SELECT failed_attempts,locked_until FROM login_attempts WHERE scope_key=?").bind(rateKey).first();
+    if (current?.locked_until && current.locked_until > now) return json({ error: "Muitas tentativas. Aguarde 15 minutos antes de tentar novamente." }, 429);
+    const u = await env.DB.prepare("SELECT u.id,u.barbershop_id,u.name,u.email,u.password_hash,u.role,u.is_active,b.name AS shop_name,b.slug AS shop_slug FROM users u JOIN barbershops b ON b.id=u.barbershop_id WHERE lower(u.email)=? AND u.role='owner'").bind(email).first();
+    if (!u || !u.is_active || !await verifyPassword(u.password_hash, password)) {
+      const attempt = await recordFailedPinAttempt(env, rateKey, now, 5);
+      if (attempt?.locked_until && attempt.locked_until > now) return json({ error: "Limite de tentativas atingido. Acesso bloqueado por 15 minutos." }, 429);
+      return json({ error: "E-mail ou senha incorretos." }, 401);
+    }
+    await env.DB.prepare("DELETE FROM login_attempts WHERE scope_key=?").bind(rateKey).run();
+    if (needsPasswordRehash(u.password_hash)) {
+      await env.DB.prepare("UPDATE users SET password_hash=? WHERE id=? AND barbershop_id=?").bind(await hashPassword(password), u.id, u.barbershop_id).run();
+    }
+    const sid = await createSession(env, u, "owner");
+    return json({ message: "Login realizado com sucesso.", user: { id: u.id, name: u.name, email: u.email, role: u.role },
+      barbershop: { id: u.barbershop_id, name: u.shop_name, slug: u.shop_slug } }, 200, { "set-cookie": sessionCookie(sid) });
   }
-  if(url.pathname==="/api/auth/me"&&request.method==="GET"){
+    if(url.pathname==="/api/auth/me"&&request.method==="GET"){
    const s=await readSession(request,env);if(!s||s.role!=="owner")return json({error:"Acesso não autorizado. Faça login."},401);
    return json({id:s.user_id,barbershop_id:s.barbershop_id,name:s.name,email:s.email,role:s.role,barbershop_slug:s.barbershop_slug});
   }

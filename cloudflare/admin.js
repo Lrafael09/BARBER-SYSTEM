@@ -1,4 +1,5 @@
 import { hashPassword } from "./passwords.js";
+import { saoPauloDateTime } from "./public.js";
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
@@ -48,7 +49,7 @@ function mondayOf(value) {
   return addDays(value, -((weekday + 6) % 7));
 }
 
-export function financePeriod(period, today = new Date().toISOString().slice(0, 10)) {
+export function financePeriod(period, today = saoPauloDateTime().date) {
   if (!validDate(today)) throw new Error("Data atual inválida.");
   if (period === "today") return { start: today, end: today };
   if (period === "week") return { start: mondayOf(today), end: today };
@@ -165,11 +166,11 @@ async function financeSummary(env, shopId, url) {
     env.DB.prepare(
       "SELECT COALESCE(SUM(CASE WHEN entry_type='income' THEN amount_cents ELSE 0 END),0) AS income,COALESCE(SUM(CASE WHEN entry_type='expense' THEN amount_cents ELSE 0 END),0) AS expenses,COUNT(*) AS count FROM finance_entries WHERE barbershop_id=? AND entry_date>=? AND entry_date<=?"
     ).bind(shopId, range.start, range.end).first(),
-    goalTargets(env, shopId, new Date().toISOString().slice(0, 10)),
+    goalTargets(env, shopId, saoPauloDateTime().date),
     financialConfig(env, shopId)
   ]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = saoPauloDateTime().date;
   const periods = {
     daily: financePeriod("today", today),
     weekly: financePeriod("week", today),
@@ -213,7 +214,7 @@ async function createFinanceEntry(request, env, shopId) {
   const type = data.entry_type;
   const description = String(data.description || "").trim();
   const category = String(data.category || "").trim() || null;
-  const entryDate = data.entry_date || new Date().toISOString().slice(0, 10);
+  const entryDate = data.entry_date || saoPauloDateTime().date;
   let amount;
   try { amount = parseMoneyCents(data.amount); }
   catch (error) { return json({ error: error.message }, 400); }
@@ -539,11 +540,19 @@ async function saveBarbershopSettings(request, env, shopId) {
   const color = String(data.brand_color || "#a8f05a").trim();
   const theme = String(data.theme || "dark").trim().toLowerCase();
   if (!name || name.length > 120) return json({ error: "Informe um nome de barbearia válido." }, 400);
+  if (whatsapp && (whatsapp.length < 10 || whatsapp.length > 13)) return json({ error: "Informe um WhatsApp válido com DDD." }, 400);
   if (!/^#[0-9a-fA-F]{6}$/.test(color)) return json({ error: "Escolha uma cor válida." }, 400);
   if (!["dark", "light"].includes(theme)) return json({ error: "Tema inválido." }, 400);
-  await env.DB.prepare(
-    "UPDATE barbershops SET name=?,whatsapp=?,brand_color=?,theme=? WHERE id=?"
-  ).bind(name, whatsapp || null, color.toLowerCase(), theme, shopId).run();
+  if (whatsapp) {
+    const duplicate = await env.DB.prepare("SELECT id FROM barbershops WHERE whatsapp=? AND id<>? LIMIT 1").bind(whatsapp, shopId).first();
+    if (duplicate) return json({ error: "Este WhatsApp já está vinculado a outra barbearia." }, 409);
+  }
+  try {
+    await env.DB.prepare("UPDATE barbershops SET name=?,whatsapp=?,brand_color=?,theme=? WHERE id=?").bind(name, whatsapp || null, color.toLowerCase(), theme, shopId).run();
+  } catch (error) {
+    if (String(error?.message || "").toLowerCase().includes("unique")) return json({ error: "Este WhatsApp já está vinculado a outra barbearia." }, 409);
+    throw error;
+  }
   return json({ message: "Identidade da barbearia atualizada." });
 }
 
@@ -573,7 +582,7 @@ async function adminDashboard(env, shopId) {
   await env.DB.prepare(
     "INSERT OR IGNORE INTO finance_entries(barbershop_id,entry_type,description,category,amount_cents,entry_date,appointment_id) SELECT barbershop_id,'income','Atendimento concluído: '||service_name,'Atendimentos',price_cents,date(starts_at),id FROM appointments WHERE barbershop_id=? AND status='completed'"
   ).bind(shopId).run();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = saoPauloDateTime().date;
   const month = today.slice(0, 7);
   const [totals, monthly, revenue, counts] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS appointments_today,SUM(CASE WHEN status='scheduled' THEN 1 ELSE 0 END) AS scheduled_today,SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed_today,SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) AS cancelled_today FROM appointments WHERE barbershop_id=? AND substr(starts_at,1,10)=?").bind(shopId, today).first(),

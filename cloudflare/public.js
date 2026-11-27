@@ -22,6 +22,16 @@ export function parseDate(value) {
   return { value, weekday: (date.getUTCDay() + 6) % 7 };
 }
 
+export function saoPauloDateTime(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(now).map(part => [part.type, part.value]));
+  return { date: parts.year + "-" + parts.month + "-" + parts.day,
+    time: parts.hour + ":" + parts.minute,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute) };
+}
+
 export function parseClock(value) {
   if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
   const [hour, minute] = value.split(":").map(Number);
@@ -170,40 +180,39 @@ async function createCustomer(request, env, slug) {
 
 async function lookupCustomer(request, env, slug) {
   const data = await request.json().catch(() => null);
-  if (!data || typeof data !== "object") return json({ error: "Envie os quatro números em formato JSON." }, 400);
-  const last4 = normalizePhone(data.phone_last4);
-  if (last4.length !== 4) return json({ error: "Informe exatamente os quatro últimos números do telefone." }, 400);
+  if (!data || typeof data !== "object") return json({ error: "Informe seu celular completo em formato JSON." }, 400);
+  const phone = normalizePhone(data.phone);
+  if (phone.length < 10 || phone.length > 13) return json({ error: "Informe o celular completo com DDD." }, 400);
   const shop = await findShop(env, slug);
   if (!shop) return json({ error: "Barbearia não encontrada." }, 404);
-  const rows = await env.DB.prepare(
-    "SELECT id,name FROM customers WHERE barbershop_id=? AND phone_last4=? ORDER BY name COLLATE NOCASE LIMIT 10"
-  ).bind(shop.id, last4).all();
-  const matches = (rows.results || []).map(row => ({ id: row.id, display_name: row.name }));
+  const customer = await env.DB.prepare(
+    "SELECT id,name FROM customers WHERE barbershop_id=? AND phone=?"
+  ).bind(shop.id, phone).first();
   return json({
-    matches,
-    count: matches.length,
-    message: matches.length ? "Escolha seu cadastro ou informe outro telefone." :
+    matches: customer ? [{ id: customer.id, display_name: maskCustomerName(customer.name) }] : [],
+    count: customer ? 1 : 0,
+    message: customer ? "Cadastro localizado. Confira os dados para continuar." :
       "Nenhum cadastro encontrado. Você pode fazer um novo cadastro."
   });
 }
 
 async function confirmCustomer(request, env, slug) {
   const data = await request.json().catch(() => null);
-  if (!data || typeof data !== "object") return json({ error: "Envie os dados em formato JSON." }, 400);
-  const last4 = normalizePhone(data.phone_last4);
+  if (!data || typeof data !== "object") return json({ error: "Envie os dados em JSON." }, 400);
+  const phone = normalizePhone(data.phone);
   const customerId = Number(data.customer_id);
-  if (last4.length !== 4 || !Number.isSafeInteger(customerId) || customerId < 1) {
-    return json({ error: "Informe o cadastro e os quatro últimos números." }, 400);
+  if (phone.length < 10 || phone.length > 13 || !Number.isSafeInteger(customerId) || customerId < 1) {
+    return json({ error: "Informe o cadastro e o celular completo com DDD." }, 400);
   }
   const shop = await findShop(env, slug);
   if (!shop) return json({ error: "Barbearia não encontrada." }, 404);
   const customer = await env.DB.prepare(
-    "SELECT id,name FROM customers WHERE id=? AND barbershop_id=? AND phone_last4=?"
-  ).bind(customerId, shop.id, last4).first();
-  if (!customer) return json({ error: "Cadastro não encontrado para esses números." }, 404);
+    "SELECT id,name FROM customers WHERE id=? AND barbershop_id=? AND phone=?"
+  ).bind(customerId, shop.id, phone).first();
+  if (!customer) return json({ error: "Cadastro não encontrado para esse celular." }, 404);
   return json({
-    message: "Cadastro selecionado.",
-    customer: { id: customer.id, display_name: customer.name },
+    message: "Cadastro localizado.",
+    customer: { id: customer.id, display_name: maskCustomerName(customer.name) },
     identity_verified: false
   });
 }
@@ -218,6 +227,8 @@ async function publicAvailability(env, slug, url) {
       !Number.isSafeInteger(barberId) || barberId < 1 || !day) {
     return json({ error: "Informe service_id, barber_id e date (AAAA-MM-DD)." }, 400);
   }
+  const localNow = saoPauloDateTime();
+  if (day.value < localNow.date) return json({ error: "Não é possível consultar horários em uma data passada." }, 400);
   const [service, barber] = await Promise.all([
     getService(env, shop.id, serviceId),
     getBookableBarber(env, shop.id, barberId)
@@ -260,6 +271,7 @@ async function publicAvailability(env, slug, url) {
   for (let candidate = opening; candidate + duration <= closing; candidate += 15) {
     const end = candidate + duration;
     if (candidate < businessOpening || end > businessClosing) continue;
+    if (day.value === localNow.date && candidate <= localNow.minutes) continue;
     if (breaks.some(([breakStart, breakEnd]) => overlaps(candidate, end, breakStart, breakEnd))) continue;
     const startText = dateTimeText(day.value, candidate);
     const endText = dateTimeText(day.value, end);
@@ -284,6 +296,11 @@ async function createAppointment(request, env, slug) {
     return json({ error: "Informe cliente, serviço, barbeiro e data/hora válidos." }, 400);
   }
   const startMinutes = Number(match[2]) * 60 + Number(match[3]);
+  const localNow = saoPauloDateTime();
+  const requestedLocalStart = day.value + "T" + match[2] + ":" + match[3];
+  if (day.value < localNow.date || requestedLocalStart <= localNow.date + "T" + localNow.time) {
+    return json({ error: "Escolha uma data e um horário futuros no fuso de Brasília." }, 409);
+  }
   const shop = await findShop(env, slug);
   if (!shop) return json({ error: "Barbearia não encontrada." }, 404);
   const [service, customer, barber] = await Promise.all([
