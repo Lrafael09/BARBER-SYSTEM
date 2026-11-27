@@ -336,7 +336,7 @@ def create_appointment(slug):
     ).fetchone()
     barber = db.execute(
         """
-        SELECT id FROM users
+        SELECT id, commission_percent FROM users
         WHERE id = ? AND barbershop_id = ? AND is_active = 1
           AND (role = 'barber' OR (role = 'owner' AND can_serve = 1))
         """,
@@ -435,9 +435,9 @@ def create_appointment(slug):
             INSERT INTO appointments (
                 barbershop_id, customer_id, service_id, barber_id,
                 service_name, price_cents, duration_minutes,
-                starts_at, ends_at, status
+                starts_at, ends_at, commission_percent, status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
             """,
             (
                 barbershop["id"],
@@ -448,7 +448,8 @@ def create_appointment(slug):
                 service["price_cents"],
                 service["duration_minutes"],
                 starts_text,
-                ends_text
+                ends_text,
+                barber["commission_percent"]
             )
         )
         db.commit()
