@@ -18,7 +18,7 @@ test("área do profissional usa login PIN e endpoints Cloudflare", () => {
   assert.match(BARBER_PAGE, /\/barber\/shops\//);
   assert.match(BARBER_PAGE, /attendance-arrival/);
   assert.match(BARBER_PAGE, /attendance-departure/);
-  assert.match(BARBER_PAGE, /Chegada registrada/);
+  assert.match(BARBER_PAGE, /Registre sua chegada para aparecer como disponível hoje/);
   assert.match(BARBER_PAGE, /\/api'\+path/);
   assert.doesNotMatch(BARBER_PAGE, /\{\{|\{%/);
 });
