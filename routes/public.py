@@ -41,7 +41,7 @@ def mask_customer_name(name):
 def find_barbershop(slug):
     return get_db().execute(
         """
-        SELECT id, name, slug, whatsapp, logo_data
+        SELECT id, name, slug, whatsapp, logo_data, brand_color, theme
         FROM barbershops
         WHERE slug = ?
         """,
