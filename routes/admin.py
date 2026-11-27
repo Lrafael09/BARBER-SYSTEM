@@ -1363,6 +1363,126 @@ def _finance_period(period):
     return start.isoformat(), end.isoformat()
 
 
+
+
+def _financial_config(db, barbershop_id):
+    costs = db.execute(
+        "SELECT id, name, amount_cents FROM fixed_costs WHERE barbershop_id = ? ORDER BY id",
+        (barbershop_id,)
+    ).fetchall()
+    settings = db.execute(
+        "SELECT desired_profit_cents FROM financial_settings WHERE barbershop_id = ?",
+        (barbershop_id,)
+    ).fetchone()
+    desired_profit = settings["desired_profit_cents"] if settings else 0
+    total_costs = sum(row["amount_cents"] for row in costs)
+    return costs, desired_profit, total_costs
+
+
+def _open_days_in_range(db, barbershop_id, start_date, end_date):
+    from datetime import timedelta
+    rows = db.execute(
+        "SELECT weekday, is_open FROM business_hours WHERE barbershop_id = ?",
+        (barbershop_id,)
+    ).fetchall()
+    if rows:
+        open_weekdays = {row["weekday"] for row in rows if row["is_open"]}
+    else:
+        open_weekdays = set(range(6))
+    days = []
+    current = start_date
+    while current <= end_date:
+        if current.weekday() in open_weekdays:
+            days.append(current)
+        current += timedelta(days=1)
+    return days
+
+
+def _monthly_revenue_target(db, barbershop_id, year, month):
+    from calendar import monthrange
+    from datetime import date
+    _, desired_profit, total_costs = _financial_config(db, barbershop_id)
+    month_start = date(year, month, 1)
+    month_end = date(year, month, monthrange(year, month)[1])
+    open_days = _open_days_in_range(db, barbershop_id, month_start, month_end)
+    monthly_target = total_costs + desired_profit
+    daily_target = int(round(monthly_target / len(open_days))) if open_days else 0
+    return monthly_target, daily_target, len(open_days)
+
+
+def _goal_targets(db, barbershop_id):
+    from datetime import date, timedelta
+    today = date.today()
+    month_target, daily_target, open_days_month = _monthly_revenue_target(
+        db, barbershop_id, today.year, today.month
+    )
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    weekly_target = 0
+    for day in _open_days_in_range(db, barbershop_id, week_start, week_end):
+        _, day_target, _ = _monthly_revenue_target(
+            db, barbershop_id, day.year, day.month
+        )
+        weekly_target += day_target
+    return {"daily": daily_target, "weekly": weekly_target, "monthly": month_target}
+
+
+@admin_bp.route("/finance/config", methods=["GET"])
+@active_owner_required
+def get_financial_config():
+    costs, desired_profit, total_costs = _financial_config(
+        get_db(), session["barbershop_id"]
+    )
+    return jsonify({
+        "fixed_costs": [dict(row) for row in costs],
+        "fixed_costs_total_cents": total_costs,
+        "desired_profit_cents": desired_profit
+    }), 200
+
+
+@admin_bp.route("/finance/config", methods=["PUT"])
+@active_owner_required
+def save_financial_config():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("fixed_costs"), list):
+        return jsonify({"error": "Informe as despesas fixas e o lucro desejado."}), 400
+    try:
+        desired_profit = parse_price_cents(data.get("desired_profit", 0))
+        if len(data["fixed_costs"]) > 50:
+            raise ValueError("Cadastre no máximo 50 despesas fixas.")
+        normalized = []
+        for item in data["fixed_costs"]:
+            if not isinstance(item, dict):
+                raise ValueError("Uma das despesas está inválida.")
+            name = str(item.get("name", "")).strip()
+            amount = parse_price_cents(item.get("amount"))
+            if not name or len(name) > 100 or amount <= 0:
+                raise ValueError("Cada despesa precisa de nome e valor maior que zero.")
+            normalized.append((name, amount))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    db = get_db()
+    barbershop_id = session["barbershop_id"]
+    db.execute("DELETE FROM fixed_costs WHERE barbershop_id = ?", (barbershop_id,))
+    db.executemany(
+        "INSERT INTO fixed_costs (barbershop_id, name, amount_cents) VALUES (?, ?, ?)",
+        [(barbershop_id, name, amount) for name, amount in normalized]
+    )
+    db.execute(
+        """
+        INSERT INTO financial_settings (barbershop_id, desired_profit_cents)
+        VALUES (?, ?)
+        ON CONFLICT(barbershop_id) DO UPDATE SET
+            desired_profit_cents = excluded.desired_profit_cents,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (barbershop_id, desired_profit)
+    )
+    db.commit()
+    return jsonify({"message": "Despesas fixas e lucro desejado salvos."}), 200
+
+
 @admin_bp.route("/finance/summary", methods=["GET"])
 @active_owner_required
 def finance_summary():
@@ -1397,11 +1517,7 @@ def finance_summary():
         """,
         (session["barbershop_id"], start, end)
     ).fetchone()
-    goals = db.execute(
-        "SELECT period_type, target_cents FROM financial_goals WHERE barbershop_id = ?",
-        (session["barbershop_id"],)
-    ).fetchall()
-    goal_map = {row["period_type"]: row["target_cents"] for row in goals}
+    goals = _goal_targets(db, session["barbershop_id"])
     goal_achieved = {}
     for goal_period in ("daily", "weekly", "monthly"):
         goal_start, goal_end = _finance_period({
@@ -1409,25 +1525,26 @@ def finance_summary():
         }[goal_period])
         achieved = db.execute(
             """
-            SELECT COALESCE(SUM(amount_cents), 0) AS amount
-            FROM finance_entries
-            WHERE barbershop_id = ? AND entry_type = 'income'
-              AND entry_date >= ? AND entry_date <= ?
+            SELECT COALESCE(SUM(price_cents), 0) AS amount
+            FROM appointments
+            WHERE barbershop_id = ? AND status = 'completed'
+              AND date(starts_at) >= ? AND date(starts_at) <= ?
             """,
             (session["barbershop_id"], goal_start, goal_end)
         ).fetchone()
         goal_achieved[goal_period] = achieved["amount"]
+    _, desired_profit, fixed_costs_total = _financial_config(
+        db, session["barbershop_id"]
+    )
     return jsonify({
         "period": period, "start": start, "end": end,
         "income_cents": totals["income"], "expense_cents": totals["expenses"],
         "profit_cents": totals["income"] - totals["expenses"],
         "entry_count": totals["count"],
-        "goals": {
-            "daily": goal_map.get("daily", 0),
-            "weekly": goal_map.get("weekly", 0),
-            "monthly": goal_map.get("monthly", 0)
-        },
-        "goal_achieved": goal_achieved
+        "goals": goals,
+        "goal_achieved": goal_achieved,
+        "fixed_costs_total_cents": fixed_costs_total,
+        "desired_profit_cents": desired_profit
     }), 200
 
 
