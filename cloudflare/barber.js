@@ -24,14 +24,14 @@ async function requireBarber(request, env) {
   return { session };
 }
 
-function validDate(value) {
+export function validDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
   const parsed = new Date(Date.UTC(year, month - 1, day));
   return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
 }
 
-function parseClock(value) {
+export function parseClock(value) {
   if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
   const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
@@ -47,21 +47,21 @@ function addDays(value, count) {
   return dateText(date);
 }
 
-function mondayOf(value) {
+export function mondayOf(value) {
   const weekday = new Date(value + "T00:00:00.000Z").getUTCDay();
   return addDays(value, -((weekday + 6) % 7));
 }
 
-function monthStart(value) {
+export function monthStart(value) {
   return value.slice(0, 7) + "-01";
 }
 
-function monthEnd(value) {
+export function monthEnd(value) {
   const [year, month] = value.split("-").map(Number);
   return dateText(new Date(Date.UTC(year, month, 0)));
 }
 
-function commissionCents(priceCents, percent) {
+export function commissionCents(priceCents, percent) {
   return Math.round(Number(priceCents) * Number(percent || 0) / 100);
 }
 
@@ -80,9 +80,10 @@ async function completeAppointment(env, session, appointmentId, allowAnyStatus =
   if (!appointment) return json({ error: "Atendimento ativo não encontrado na sua agenda." }, 404);
   const percent = appointment.commission_percent ?? appointment.current_commission_percent ?? 0;
   const cents = commissionCents(appointment.price_cents, percent);
+  const updateStatusFilter = allowAnyStatus ? "" : " AND status='scheduled'";
   await env.DB.batch([
     env.DB.prepare(
-      "UPDATE appointments SET status='completed',cancellation_reason=NULL,cancelled_at=NULL,commission_percent=?,commission_cents=? WHERE id=? AND barbershop_id=? AND barber_id=?"
+      "UPDATE appointments SET status='completed',cancellation_reason=NULL,cancelled_at=NULL,commission_percent=?,commission_cents=? WHERE id=? AND barbershop_id=? AND barber_id=?" + updateStatusFilter
     ).bind(percent, cents, appointmentId, session.barbershop_id, session.user_id),
     env.DB.prepare(
       "INSERT OR IGNORE INTO finance_entries(barbershop_id,entry_type,description,category,amount_cents,entry_date,appointment_id) VALUES(?,'income',?,'Atendimentos',?,date(?),?)"
@@ -195,8 +196,10 @@ async function updateLunchBreaks(request, env, session) {
       if (startMinute === null || endMinute === null || endMinute <= startMinute) {
         return json({ error: "O almoço deve usar horários válidos no formato HH:MM." }, 400);
       }
-      if (!business?.is_open || !effective?.is_open ||
-          startMinute <= parseClock(effective.open_time) || endMinute >= parseClock(effective.close_time)) {
+      const effectiveOpen = parseClock(effective?.open_time);
+      const effectiveClose = parseClock(effective?.close_time);
+      if (!business?.is_open || !effective?.is_open || effectiveOpen === null || effectiveClose === null ||
+          startMinute <= effectiveOpen || endMinute >= effectiveClose) {
         return json({ error: "O almoço precisa ficar dentro de um dia com expediente." }, 400);
       }
       const bookings = await env.DB.prepare(
