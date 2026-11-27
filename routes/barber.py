@@ -202,3 +202,133 @@ def logout_barber():
 
     session.clear()
     return jsonify({"message": "Logout realizado com sucesso."}), 200
+
+
+
+@barber_bp.route("/appointments", methods=["GET"])
+@barber_required
+def barber_appointments():
+    """Lista somente os atendimentos do barbeiro autenticado."""
+
+    from datetime import date
+
+    date_filter = request.args.get("date")
+    status_filter = request.args.get("status")
+
+    if date_filter:
+        try:
+            date.fromisoformat(date_filter)
+        except ValueError:
+            return jsonify({"error": "A data deve usar AAAA-MM-DD."}), 400
+
+    if status_filter and status_filter not in {"scheduled", "completed", "cancelled"}:
+        return jsonify({"error": "Status inválido."}), 400
+
+    conditions = [
+        "appointments.barbershop_id = ?",
+        "appointments.barber_id = ?"
+    ]
+    params = [session["barbershop_id"], session["user_id"]]
+
+    if date_filter:
+        conditions.append("date(appointments.starts_at) = ?")
+        params.append(date_filter)
+
+    if status_filter:
+        conditions.append("appointments.status = ?")
+        params.append(status_filter)
+
+    rows = get_db().execute(
+        f"""
+        SELECT appointments.id, appointments.service_name,
+               appointments.price_cents, appointments.duration_minutes,
+               appointments.starts_at, appointments.ends_at,
+               appointments.status, appointments.cancellation_reason,
+               customers.name AS customer_name
+        FROM appointments
+        INNER JOIN customers
+          ON customers.id = appointments.customer_id
+         AND customers.barbershop_id = appointments.barbershop_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY appointments.starts_at
+        LIMIT 300
+        """,
+        params
+    ).fetchall()
+
+    return jsonify({
+        "appointments": [
+            {
+                "id": row["id"],
+                "customer_name": row["customer_name"],
+                "service_name": row["service_name"],
+                "price_cents": row["price_cents"],
+                "duration_minutes": row["duration_minutes"],
+                "starts_at": row["starts_at"],
+                "ends_at": row["ends_at"],
+                "status": row["status"],
+                "cancellation_reason": row["cancellation_reason"]
+            }
+            for row in rows
+        ]
+    }), 200
+
+
+@barber_bp.route("/appointments/<int:appointment_id>/complete", methods=["POST"])
+@barber_required
+def complete_barber_appointment(appointment_id):
+    """Marca como concluído somente um atendimento do barbeiro logado."""
+
+    db = get_db()
+    cursor = db.execute(
+        """
+        UPDATE appointments
+        SET status = 'completed'
+        WHERE id = ?
+          AND barbershop_id = ?
+          AND barber_id = ?
+          AND status = 'scheduled'
+        """,
+        (appointment_id, session["barbershop_id"], session["user_id"])
+    )
+    db.commit()
+
+    if cursor.rowcount == 0:
+        return jsonify({"error": "Atendimento ativo não encontrado na sua agenda."}), 404
+
+    return jsonify({"message": "Atendimento marcado como concluído."}), 200
+
+
+@barber_bp.route("/appointments/<int:appointment_id>/cancel", methods=["POST"])
+@barber_required
+def cancel_barber_appointment(appointment_id):
+    """Cancela um atendimento próprio exigindo o motivo."""
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Informe o motivo do cancelamento."}), 400
+
+    reason = str(data.get("reason", "")).strip()
+    if not reason or len(reason) > 250:
+        return jsonify({"error": "O motivo deve ter entre 1 e 250 caracteres."}), 400
+
+    db = get_db()
+    cursor = db.execute(
+        """
+        UPDATE appointments
+        SET status = 'cancelled',
+            cancellation_reason = ?,
+            cancelled_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND barbershop_id = ?
+          AND barber_id = ?
+          AND status = 'scheduled'
+        """,
+        (reason, appointment_id, session["barbershop_id"], session["user_id"])
+    )
+    db.commit()
+
+    if cursor.rowcount == 0:
+        return jsonify({"error": "Atendimento ativo não encontrado na sua agenda."}), 404
+
+    return jsonify({"message": "Atendimento cancelado com sucesso."}), 200
