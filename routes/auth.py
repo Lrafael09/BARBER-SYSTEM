@@ -126,8 +126,8 @@ def register_owner():
 
         db.execute(
             """
-            INSERT INTO users (barbershop_id, name, email, password_hash, role)
-            VALUES (?, ?, ?, ?, 'owner')
+            INSERT INTO users (barbershop_id, name, email, password_hash, role, can_serve)
+            VALUES (?, ?, ?, ?, 'owner', 0)
             """,
             (barbershop_id, owner_name, email, hash_password(password))
         )
