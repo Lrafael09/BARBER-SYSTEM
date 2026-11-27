@@ -80,7 +80,7 @@ def login_barber(slug, barber_id):
           AND users.id = ?
           AND users.role IN ('barber', 'owner')
           AND users.is_active = 1
-          AND (users.role = 'barber' OR users.can_serve = 1)
+          AND (users.role = 'barber' OR users.can_serve = 1)\n          AND users.pin_hash IS NOT NULL
         """,
         (slug, barber_id)
     ).fetchone()
@@ -377,7 +377,7 @@ def list_public_staff(slug):
         FROM users
         WHERE barbershop_id = ? AND is_active = 1
           AND (role = 'barber' OR (role = 'owner' AND can_serve = 1))
-          AND (role = 'owner' OR pin_hash IS NOT NULL)
+          AND pin_hash IS NOT NULL
         ORDER BY name COLLATE NOCASE
         """,
         (shop["id"],)
