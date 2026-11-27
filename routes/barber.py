@@ -10,7 +10,7 @@ As tentativas são limitadas e registradas no banco.
 import time
 from functools import wraps
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, render_template
 from werkzeug.security import check_password_hash
 
 from database import get_db
@@ -332,3 +332,22 @@ def cancel_barber_appointment(appointment_id):
         return jsonify({"error": "Atendimento ativo não encontrado na sua agenda."}), 404
 
     return jsonify({"message": "Atendimento cancelado com sucesso."}), 200
+
+
+
+@barber_bp.route("/<slug>", methods=["GET"])
+def barber_panel_page(slug):
+    """Entrega a interface de login e agenda individual do barbeiro."""
+
+    shop = get_db().execute(
+        "SELECT name, slug FROM barbershops WHERE slug = ?",
+        (slug,)
+    ).fetchone()
+    if shop is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+
+    return render_template(
+        "barber.html",
+        barbershop_name=shop["name"],
+        barbershop_slug=shop["slug"]
+    )
