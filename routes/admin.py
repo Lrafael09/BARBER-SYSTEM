@@ -279,7 +279,7 @@ def update_service(service_id):
         return jsonify({"error": "Serviço não encontrado."}), 404
 
     try:
-        service = validate_service_data(data, partial=True, existing=existing)
+        service = validate_service_data(data, partial=True, existing=dict(existing))
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
 
