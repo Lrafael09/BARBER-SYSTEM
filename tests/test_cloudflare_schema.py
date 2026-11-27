@@ -13,6 +13,7 @@ class CloudflareBookingSchemaTests(unittest.TestCase):
         self.db.executescript((ROOT / "cloudflare" / "schema.sql").read_text(encoding="utf-8"))
         self.db.executescript((ROOT / "cloudflare" / "auth-sessions.sql").read_text(encoding="utf-8"))
         self.db.executescript((ROOT / "cloudflare" / "public-booking.sql").read_text(encoding="utf-8"))
+        self.db.executescript((ROOT / "cloudflare" / "migrations" / "0002_multi_tenant.sql").read_text(encoding="utf-8"))
 
         self.shop_id = self.db.execute(
             "INSERT INTO barbershops(name,slug) VALUES('Barbearia Teste','barbearia-teste')"
@@ -37,6 +38,59 @@ class CloudflareBookingSchemaTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+
+
+    def test_two_barbershops_can_have_separate_owner_accounts(self):
+        second_shop = self.db.execute(
+            "INSERT INTO barbershops(name,slug,whatsapp) VALUES('Outra Barbearia','outra-barbearia','11911112222')"
+        ).lastrowid
+        self.db.execute(
+            "INSERT INTO users(barbershop_id,name,email,password_hash,role) VALUES(?,?,?,?, 'owner')",
+            (self.shop_id, "Dono Um", "dono1@example.com", "hash1"),
+        )
+        self.db.execute(
+            "INSERT INTO users(barbershop_id,name,email,password_hash,role) VALUES(?,?,?,?, 'owner')",
+            (second_shop, "Dono Dois", "dono2@example.com", "hash2"),
+        )
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM users WHERE role='owner'").fetchone()[0],
+            2,
+        )
+
+    def test_owner_email_must_be_unique_across_barbershops(self):
+        second_shop = self.db.execute(
+            "INSERT INTO barbershops(name,slug,whatsapp) VALUES('Outra Barbearia','outra-barbearia','11911112222')"
+        ).lastrowid
+        self.db.execute(
+            "INSERT INTO users(barbershop_id,name,email,password_hash,role) VALUES(?,?,?,?, 'owner')",
+            (self.shop_id, "Dono Um", "dono@example.com", "hash1"),
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO users(barbershop_id,name,email,password_hash,role) VALUES(?,?,?,?, 'owner')",
+                (second_shop, "Dono Dois", "DONO@example.com", "hash2"),
+            )
+
+    def test_each_barbershop_can_have_only_one_owner(self):
+        self.db.execute(
+            "INSERT INTO users(barbershop_id,name,email,password_hash,role) VALUES(?,?,?,?, 'owner')",
+            (self.shop_id, "Dono Um", "dono1@example.com", "hash1"),
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO users(barbershop_id,name,email,password_hash,role) VALUES(?,?,?,?, 'owner')",
+                (self.shop_id, "Dono Dois", "dono2@example.com", "hash2"),
+            )
+
+    def test_barbershop_whatsapp_must_be_unique(self):
+        self.db.execute(
+            "UPDATE barbershops SET whatsapp='11911112222' WHERE id=?",
+            (self.shop_id,),
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO barbershops(name,slug,whatsapp) VALUES('Outra','outra','11911112222')"
+            )
 
     def add_appointment(self, barber_id, starts_at, ends_at):
         return self.db.execute(
