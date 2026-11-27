@@ -382,6 +382,30 @@ class BarberSystemTests(unittest.TestCase):
         catalog = self.client.get(f"/b/{slug}/catalog").get_json()
         self.assertTrue(any(x["role"] == "owner" for x in catalog["barbers"]))
 
+        # Com o dono habilitado para atender, a agenda administrativa recebe seu ID.
+        self.create_schedule()
+        client = self.client.post(f"/b/{slug}/customers", json={
+            "name": "Cliente do Dono", "phone": "11987654329",
+        })
+        self.assertEqual(client.status_code, 201, client.get_json())
+        appointment_day = self.next_monday()
+        owner_booking = self.client.post(f"/b/{slug}/appointments", json={
+            "customer_id": client.get_json()["customer"]["id"],
+            "service_id": self.create_service(),
+            "barber_id": owner["id"],
+            "starts_at": f"{appointment_day.isoformat()}T09:00",
+        })
+        self.assertEqual(owner_booking.status_code, 201, owner_booking.get_json())
+        admin_day = self.client.get(
+            f"/admin/appointments?date={appointment_day.isoformat()}"
+        ).get_json()["appointments"]
+        self.assertTrue(any(
+            item["barber_id"] == owner["id"] for item in admin_day
+        ))
+        admin_page = self.client.get("/admin/panel")
+        self.assertIn(b"O dono tamb", admin_page.data)
+        self.assertIn(b"group.label='Propriet", admin_page.data)
+
         settings = self.client.post("/admin/barbershop/settings", json={
             "name": "Barbearia Personalizada",
             "whatsapp": "5511999999999",
