@@ -17,7 +17,7 @@ button.secondary{background:#282828;color:#eee;border:1px solid #444}
 .row{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 .filters{display:flex;gap:8px;flex-wrap:wrap}.filters input,.filters select{width:auto;min-width:150px}
 .item{padding:13px 0;border-bottom:1px solid #303030}.muted{color:#999;font-size:13px}.message{color:#a8f05a;white-space:pre-wrap;margin-top:10px}
-.error{color:#ff8585}.hidden{display:none}.columns{display:grid;grid-template-columns:1.4fr 1fr;gap:15px}
+.error{color:#ff8585}.hidden{display:none}.logo-preview{width:92px;height:92px;object-fit:contain;background:#0c0c0c;border:1px solid #383838;border-radius:12px;padding:6px}.columns{display:grid;grid-template-columns:1.4fr 1fr;gap:15px}
 .auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.auth-card{margin-top:18px}
 @media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.columns,.auth-grid{grid-template-columns:1fr}}
 @media(max-width:430px){.grid{grid-template-columns:1fr 1fr}.metric strong{font-size:20px}}
@@ -52,8 +52,14 @@ button.secondary{background:#282828;color:#eee;border:1px solid #444}
 <section id="dashboard" class="hidden">
 <div class="row"><div><h1 id="welcome">Painel administrativo</h1><p>Resumo e agenda da sua barbearia.</p></div><button class="secondary" id="logout" style="width:auto">Sair</button></div>
 <div class="grid" id="metrics"></div>
+<section class="card" id="brand-card">
+ <div class="row"><div><h2>Identidade da barbearia</h2><p class="muted">Adicione a logo que seus clientes verão na página de agendamento.</p></div><img id="logo-preview" class="logo-preview hidden" alt="Prévia da logo"></div>
+ <label for="shop-logo">Logo da barbearia</label><input id="shop-logo" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+ <button id="upload-logo" style="max-width:220px">Salvar logo</button><div id="logo-message" class="message"></div>
+ <p class="muted">Formatos PNG, JPG, WEBP ou GIF. Tamanho máximo: 512 KB.</p>
+</section>
 <div class="columns">
-<section class="card"><div class="row"><h2>Agendamentos</h2><a id="public-link" target="_blank" rel="noopener" style="color:#a8f05a">Página pública</a></div>
+<section class="card"><div class="row"><h2>Agendamentos</h2><div style="display:flex;gap:14px;flex-wrap:wrap"><a id="public-link" target="_blank" rel="noopener" style="color:#a8f05a">Página pública</a><a id="barber-link" target="_blank" rel="noopener" style="color:#a8f05a">Página do colaborador</a></div></div>
 <div class="filters"><input id="date" type="date"><select id="status"><option value="">Todos os status</option><option value="scheduled">Agendados</option><option value="completed">Concluídos</option><option value="cancelled">Cancelados</option></select><button id="load-appointments" style="width:auto">Filtrar</button></div>
 <div id="appointments"></div><div id="agenda-message" class="message"></div></section>
 <section class="card"><h2>Novo serviço</h2>
@@ -64,6 +70,10 @@ button.secondary{background:#282828;color:#eee;border:1px solid #444}
 <button id="add-service">Cadastrar serviço</button><div id="service-message" class="message"></div>
 <h3>Serviços cadastrados</h3><div id="services" class="muted"></div></section>
 </div>
+<section class="card">
+ <div class="row"><div><h2>Clientes cadastrados</h2><p class="muted">Os cadastros feitos na página pública aparecem aqui automaticamente.</p></div><button id="refresh-customers" class="secondary" style="width:auto">Atualizar lista</button></div>
+ <div id="customers" class="muted">Carregando clientes...</div>
+</section>
 </section>
 </main>
 <script>
@@ -85,6 +95,7 @@ async function loadDashboard(){
  const [me,dash]=await Promise.all([request('/auth/me'),request('/admin/dashboard')]);
  $('welcome').textContent='Olá, '+me.name;
  $('public-link').href='/b/'+encodeURIComponent(me.barbershop_slug||'')+'/book';
+ $('barber-link').href='/barber/'+encodeURIComponent(me.barbershop_slug||'');
  const metrics=$('metrics');metrics.replaceChildren(
   metric('Agendamentos hoje',dash.today.appointments),
   metric('Pendentes',dash.today.scheduled),
@@ -96,7 +107,7 @@ async function loadDashboard(){
   metric('Profissionais ativos',dash.base.active_barbers)
  );
  $('dashboard').classList.remove('hidden');$('access-area').classList.add('hidden');
- await loadAppointments();await loadServices();
+ await loadAppointments();await loadServices();await loadBrandSettings();await loadCustomers();
 }
 async function loadAppointments(){
  const params=new URLSearchParams();if($('date').value)params.set('date',$('date').value);if($('status').value)params.set('status',$('status').value);
@@ -115,6 +126,22 @@ async function loadAppointments(){
    });item.appendChild(cancel);
   }
   root.appendChild(item);
+ });
+}
+
+async function loadBrandSettings(){
+ const data=await request('/admin/barbershop');
+ if(data.logo_data){$('logo-preview').src=data.logo_data;$('logo-preview').classList.remove('hidden');}
+ else{$('logo-preview').removeAttribute('src');$('logo-preview').classList.add('hidden');}
+}
+async function loadCustomers(){
+ const data=await request('/admin/customers');const root=$('customers');root.replaceChildren();
+ if(!data.customers.length){root.textContent='Ainda não há clientes cadastrados.';return;}
+ data.customers.forEach(customer=>{
+  const line=document.createElement('div');line.className='item';
+  const name=document.createElement('strong');name.textContent=customer.name;
+  const phone=document.createElement('p');phone.className='muted';phone.textContent=customer.phone;
+  line.append(name,phone);root.appendChild(line);
  });
 }
 async function loadServices(){
@@ -150,6 +177,21 @@ $('logout').addEventListener('click',async()=>{
  await loadRegistrationStatus();
 });
 $('load-appointments').addEventListener('click',()=>loadAppointments().catch(e=>showMessage('agenda-message',e.message,true)));
+$('refresh-customers').addEventListener('click',()=>loadCustomers().catch(e=>showMessage('logo-message',e.message,true)));
+$('shop-logo').addEventListener('change',()=>{
+ const file=$('shop-logo').files[0];if(!file)return;
+ const reader=new FileReader();reader.onload=()=>{$('logo-preview').src=reader.result;$('logo-preview').classList.remove('hidden');};reader.readAsDataURL(file);
+});
+$('upload-logo').addEventListener('click',async()=>{
+ const file=$('shop-logo').files[0];if(!file){showMessage('logo-message','Escolha uma imagem primeiro.',true);return;}
+ const form=new FormData();form.append('logo',file);
+ try{
+  const response=await fetch('/admin/barbershop/logo',{method:'POST',body:form});
+  const data=await response.json();if(!response.ok)throw new Error(data.error||'Não foi possível salvar a logo.');
+  $('logo-preview').src=data.logo_data;$('logo-preview').classList.remove('hidden');
+  $('shop-logo').value='';showMessage('logo-message','Logo salva. Ela já aparece na página pública.');
+ }catch(e){showMessage('logo-message',e.message,true);}
+});
 $('add-service').addEventListener('click',async()=>{
  try{
   await request('/admin/services',{method:'POST',body:JSON.stringify({
