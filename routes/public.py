@@ -226,3 +226,54 @@ def create_customer(slug):
         },
         "already_registered": False
     }), 201
+
+
+
+@public_bp.route("/b/<slug>/schedule", methods=["GET"])
+def public_business_schedule(slug):
+    """Expõe somente os horários de funcionamento, sem dados internos."""
+
+    barbershop = find_barbershop(slug)
+    if barbershop is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+
+    rows = get_db().execute(
+        """
+        SELECT weekday, is_open, open_time, close_time, break_start, break_end
+        FROM business_hours
+        WHERE barbershop_id = ?
+        ORDER BY weekday
+        """,
+        (barbershop["id"],)
+    ).fetchall()
+
+    configured = {
+        row["weekday"]: {
+            "weekday": row["weekday"],
+            "is_open": bool(row["is_open"]),
+            "open_time": row["open_time"],
+            "close_time": row["close_time"],
+            "break_start": row["break_start"],
+            "break_end": row["break_end"]
+        }
+        for row in rows
+    }
+
+    return jsonify({
+        "barbershop": {
+            "name": barbershop["name"],
+            "slug": barbershop["slug"]
+        },
+        "days": [
+            configured.get(day, {
+                "weekday": day,
+                "is_open": False,
+                "open_time": None,
+                "close_time": None,
+                "break_start": None,
+                "break_end": None
+            })
+            for day in range(7)
+        ],
+        "weekday_reference": "0=segunda-feira, 6=domingo"
+    }), 200
