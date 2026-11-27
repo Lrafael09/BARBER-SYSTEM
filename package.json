@@ -4,10 +4,12 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node --test"
+    "test": "node --test",
+    "build": "esbuild cloudflare/worker.js --bundle --format=esm --platform=browser --target=es2022 --minify --outfile=dist/worker.js"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.0.0",
+    "esbuild": "^0.25.0"
   },
   "dependencies": {
     "scrypt-js": "^3.0.1"
