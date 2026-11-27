@@ -351,6 +351,7 @@ function openAppointmentModal(appointment){
  const kind=appointment.booking_type==='walk_in'?'Fila #'+appointment.queue_number+' \xB7 Chegou \xE0s '+appointment.starts_at.slice(11,16):appointment.starts_at.replace('T',' ');
  $('appointment-modal-info').textContent=kind+' \xB7 '+appointment.service_name+' \xB7 '+money(appointment.price_cents)+' \xB7 '+(appointment.barber_name||'Sem barbeiro')+' \xB7 '+({scheduled:'Aguardando',completed:'Conclu\xEDdo',cancelled:'Cancelado'}[appointment.status]||appointment.status);
  $('appointment-modal').querySelector('.eyebrow').textContent=appointment.booking_type==='walk_in'?'FILA DE S\xC1BADO':'DETALHES DO AGENDAMENTO';
+ $('appointment-cancel').textContent=appointment.booking_type==='walk_in'?'Remover da fila':'Cancelar agendamento';
  const select=$('appointment-barber-select');select.replaceChildren(new Option('Sem profissional',''));
  cachedStaff.filter(x=>x.is_active&&(x.role==='barber'||(x.role==='owner'&&x.can_serve))).forEach(x=>select.add(new Option(x.name,x.id)));
  select.value=appointment.barber_id?String(appointment.barber_id):'';
@@ -369,6 +370,7 @@ function syncWalkInButton(selectedDate){
 async function openWalkInModal(){
  $('walkin-modal').classList.remove('hidden');showMessage('walkin-message','Carregando dados...');
  $('walkin-customer').replaceChildren(new Option('Cadastrar novo cliente',''));
+ $('walkin-name').value='';$('walkin-phone').value='';
  $('walkin-service').replaceChildren(new Option('Selecione o servi\xE7o',''));
  $('walkin-barber').replaceChildren(new Option('Definir depois',''));
  try{
