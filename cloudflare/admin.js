@@ -271,9 +271,110 @@ async function listAdminAppointments(env, shopId, url) {
   if (to) { conditions.push("substr(a.starts_at,1,10)<=?"); params.push(to); }
   if (status) { conditions.push("a.status=?"); params.push(status); }
   const rows = await env.DB.prepare(
-    "SELECT a.id,a.barber_id,a.service_name,a.price_cents,a.duration_minutes,a.starts_at,a.ends_at,a.status,a.cancellation_reason,c.name AS customer_name,u.name AS barber_name FROM appointments a JOIN customers c ON c.id=a.customer_id AND c.barbershop_id=a.barbershop_id LEFT JOIN users u ON u.id=a.barber_id AND u.barbershop_id=a.barbershop_id WHERE " + conditions.join(" AND ") + " ORDER BY a.starts_at LIMIT 500"
+    "SELECT a.id,a.barber_id,a.service_name,a.price_cents,a.duration_minutes,a.starts_at,a.ends_at,a.status,a.booking_type,a.queue_number,a.cancellation_reason,c.name AS customer_name,u.name AS barber_name FROM appointments a JOIN customers c ON c.id=a.customer_id AND c.barbershop_id=a.barbershop_id LEFT JOIN users u ON u.id=a.barber_id AND u.barbershop_id=a.barbershop_id WHERE " + conditions.join(" AND ") + " ORDER BY CASE WHEN a.booking_type='walk_in' THEN 0 ELSE 1 END,a.queue_number,a.starts_at LIMIT 500"
   ).bind(...params).all();
   return json({ appointments: rows.results || [] });
+}
+
+async function createWalkInQueue(request, env, shopId) {
+  const data = await request.json().catch(() => null);
+  if (!data || typeof data !== "object") return json({ error: "Informe os dados do atendimento." }, 400);
+  const localNow = saoPauloDateTime();
+  const weekday = new Date(localNow.date + "T00:00:00Z").getUTCDay();
+  if (weekday !== 6) return json({ error: "A fila por ordem de chegada só funciona aos sábados." }, 409);
+
+  const serviceId = Number(data.service_id);
+  if (!Number.isSafeInteger(serviceId) || serviceId < 1) return json({ error: "Selecione um serviço." }, 400);
+  const service = await env.DB.prepare(
+    "SELECT id,name,price_cents,duration_minutes FROM services WHERE id=? AND barbershop_id=? AND is_active=1"
+  ).bind(serviceId, shopId).first();
+  if (!service) return json({ error: "Serviço não encontrado ou inativo." }, 404);
+
+  let customerId = Number(data.customer_id) || null;
+  if (customerId) {
+    const customer = await env.DB.prepare(
+      "SELECT id FROM customers WHERE id=? AND barbershop_id=?"
+    ).bind(customerId, shopId).first();
+    if (!customer) return json({ error: "Cliente não encontrado nesta barbearia." }, 404);
+  } else {
+    const name = String(data.customer_name || "").trim();
+    const phone = String(data.customer_phone || "").replace(/\\D/g, "");
+    if (!name || name.length > 120 || phone.length < 10 || phone.length > 13) {
+      return json({ error: "Informe nome e telefone com DDD para cadastrar o cliente." }, 400);
+    }
+    const existing = await env.DB.prepare(
+      "SELECT id FROM customers WHERE barbershop_id=? AND phone=?"
+    ).bind(shopId, phone).first();
+    if (existing) customerId = existing.id;
+    else {
+      const created = await env.DB.prepare(
+        "INSERT INTO customers(barbershop_id,name,phone,phone_last4) VALUES(?,?,?,?)"
+      ).bind(shopId, name, phone, phone.slice(-4)).run();
+      customerId = created.meta.last_row_id;
+    }
+  }
+
+  let barberId = null, commissionPercent = null, effective = null;
+  if (data.barber_id !== null && data.barber_id !== undefined && data.barber_id !== "") {
+    barberId = Number(data.barber_id);
+    if (!Number.isSafeInteger(barberId) || barberId < 1) return json({ error: "Selecione um profissional válido." }, 400);
+    const barber = await env.DB.prepare(
+      "SELECT id,commission_percent FROM users WHERE id=? AND barbershop_id=? AND is_active=1 AND (role='barber' OR (role='owner' AND can_serve=1))"
+    ).bind(barberId, shopId).first();
+    if (!barber) return json({ error: "Profissional não encontrado ou indisponível." }, 404);
+    commissionPercent = barber.commission_percent || 0;
+    effective = await env.DB.prepare(
+      "SELECT is_open,open_time,close_time,break_start,break_end FROM staff_hours WHERE barbershop_id=? AND user_id=? AND weekday=5"
+    ).bind(shopId, barberId).first();
+  }
+
+  const business = await env.DB.prepare(
+    "SELECT is_open,open_time,close_time,break_start,break_end FROM business_hours WHERE barbershop_id=? AND weekday=5"
+  ).bind(shopId).first();
+  effective = effective || business;
+  const toMinutes = value => {
+    if (typeof value !== "string" || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(value)) return null;
+    const [hour, minute] = value.split(":").map(Number);
+    return hour * 60 + minute;
+  };
+  const nowMinutes = localNow.minutes;
+  const opening = toMinutes(effective?.open_time);
+  const closing = toMinutes(effective?.close_time);
+  if (!business?.is_open || !effective?.is_open || opening === null || closing === null ||
+      nowMinutes < opening || nowMinutes >= closing) {
+    return json({ error: "A barbearia ou o profissional está fora do expediente neste momento." }, 409);
+  }
+  for (const [start, end] of [[business.break_start,business.break_end],[effective.break_start,effective.break_end]]) {
+    const breakStart = toMinutes(start), breakEnd = toMinutes(end);
+    if (breakStart !== null && breakEnd !== null && nowMinutes < breakEnd && nowMinutes + Number(service.duration_minutes) > breakStart) {
+      return json({ error: "A fila está pausada durante o intervalo." }, 409);
+    }
+  }
+  const startsAt = localNow.date + "T" + localNow.time + ":00";
+  const endMinutes = nowMinutes + Number(service.duration_minutes);
+  if (!Number.isSafeInteger(Number(service.duration_minutes)) || endMinutes >= 1440) {
+    return json({ error: "A duração do serviço está inválida." }, 400);
+  }
+  const endsAt = localNow.date + "T" + String(Math.floor(endMinutes / 60)).padStart(2,"0") + ":" + String(endMinutes % 60).padStart(2,"0") + ":00";
+  const block = await env.DB.prepare(
+    "SELECT id FROM time_blocks WHERE barbershop_id=? AND (barber_id IS NULL OR barber_id=?) AND starts_at<=? AND ends_at>? LIMIT 1"
+  ).bind(shopId, barberId, startsAt, startsAt).first();
+  if (block) return json({ error: "Existe um bloqueio ativo neste momento." }, 409);
+
+  const result = await env.DB.prepare(
+    "INSERT INTO appointments(barbershop_id,customer_id,service_id,barber_id,service_name,price_cents,duration_minutes,starts_at,ends_at,commission_percent,status,booking_type,queue_number) VALUES(?,?,?,?,?,?,?,?,?,?,'scheduled','walk_in',(SELECT COALESCE(MAX(queue_number),0)+1 FROM appointments WHERE barbershop_id=? AND substr(starts_at,1,10)=? AND booking_type='walk_in'))"
+  ).bind(shopId, customerId, serviceId, barberId, service.name, service.price_cents,
+    service.duration_minutes, startsAt, endsAt, commissionPercent, shopId, localNow.date).run();
+  const queueNumber = await env.DB.prepare(
+    "SELECT queue_number FROM appointments WHERE id=? AND barbershop_id=?"
+  ).bind(result.meta.last_row_id, shopId).first();
+  return json({
+    message: "Cliente adicionado à fila.",
+    appointment: {
+      id: result.meta.last_row_id, queue_number: queueNumber?.queue_number,
+      customer_id: customerId, service: service.name, starts_at: startsAt, status: "scheduled"
+    }
+  }, 201);
 }
 
 async function cancelAdminAppointment(request, env, shopId, appointmentId) {
@@ -302,11 +403,11 @@ async function assignAppointmentBarber(request, env, shopId, appointmentId) {
     commissionPercent = staff.commission_percent || 0;
   }
   const appointment = await env.DB.prepare(
-    "SELECT id,starts_at,ends_at,status FROM appointments WHERE id=? AND barbershop_id=?"
+    "SELECT id,starts_at,ends_at,status,booking_type FROM appointments WHERE id=? AND barbershop_id=?"
   ).bind(appointmentId, shopId).first();
   if (!appointment) return json({ error: "Agendamento não encontrado." }, 404);
   if (appointment.status !== "scheduled") return json({ error: "Só é possível editar o barbeiro de um agendamento ativo." }, 409);
-  if (barberId !== null) {
+  if (barberId !== null && appointment.booking_type !== "walk_in") {
     const conflict = await env.DB.prepare(
       "SELECT id FROM appointments WHERE barbershop_id=? AND barber_id=? AND id<>? AND status='scheduled' AND starts_at<? AND ends_at>? LIMIT 1"
     ).bind(shopId, barberId, appointmentId, appointment.ends_at, appointment.starts_at).first();
@@ -830,6 +931,7 @@ export async function handleAdminApi(request, env, url) {
   if (product && request.method === "DELETE") return deactivateProduct(env, shopId, Number(product[1]));
 
   if (url.pathname === "/api/admin/appointments" && request.method === "GET") return listAdminAppointments(env, shopId, url);
+  if (url.pathname === "/api/admin/walk-ins" && request.method === "POST") return createWalkInQueue(request, env, shopId);
 
   const cancelAppointment = url.pathname.match(/^\/api\/admin\/appointments\/(\d+)\/cancel$/);
   if (cancelAppointment && request.method === "POST") return cancelAdminAppointment(request, env, shopId, Number(cancelAppointment[1]));
