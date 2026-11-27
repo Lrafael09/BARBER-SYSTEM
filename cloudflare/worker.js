@@ -1,5 +1,6 @@
 import { hashPassword, verifyPassword, needsPasswordRehash } from "./passwords.js";
 import { handlePublicApi } from "./public.js";
+import { handleBarberApi } from "./barber.js";
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
   status,
@@ -127,6 +128,9 @@ async function api(request, env, url) {
    if(s?.role==="barber")await env.DB.prepare("DELETE FROM auth_sessions WHERE id=?").bind(s.id).run();
    return json({message:"Logout realizado com sucesso."},200,{"set-cookie":sessionCookie("",0)});
   }
+
+  const barberResponse = await handleBarberApi(request, env, url);
+  if (barberResponse) return barberResponse;
 
   const publicResponse = await handlePublicApi(request, env, url);
   if (publicResponse) return publicResponse;
