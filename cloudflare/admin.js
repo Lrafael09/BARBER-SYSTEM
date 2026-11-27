@@ -889,6 +889,15 @@ async function deactivateProduct(env, shopId, productId) {
   return json({ message: "Produto desativado." });
 }
 
+async function listStaffAttendance(env, shopId, url) {
+  const date = url.searchParams.get("date") || saoPauloDateTime().date;
+  if (!validDate(date)) return json({ error: "A data deve usar AAAA-MM-DD." }, 400);
+  const rows = await env.DB.prepare(
+    "SELECT u.id AS user_id,u.name,u.role,sa.attendance_date,sa.arrived_at,sa.departed_at FROM users u LEFT JOIN staff_attendance sa ON sa.user_id=u.id AND sa.barbershop_id=u.barbershop_id AND sa.attendance_date=? WHERE u.barbershop_id=? AND u.is_active=1 AND (u.role='barber' OR (u.role='owner' AND u.can_serve=1)) ORDER BY u.name COLLATE NOCASE"
+  ).bind(date, shopId).all();
+  return json({ date, staff: rows.results || [] });
+}
+
 export async function handleAdminApi(request, env, url) {
   if (!url.pathname.startsWith("/api/admin/")) return null;
   const session = await readOwnerSession(request, env);
@@ -897,6 +906,7 @@ export async function handleAdminApi(request, env, url) {
   }
   const shopId = session.barbershop_id;
 
+  if (url.pathname === "/api/admin/attendance" && request.method === "GET") return listStaffAttendance(env, shopId, url);
   if (url.pathname === "/api/admin/dashboard" && request.method === "GET") return adminDashboard(env, shopId);
   if (url.pathname === "/api/admin/customers" && request.method === "GET") return listAdminCustomers(env, shopId);
   if (url.pathname === "/api/admin/barbershop" && request.method === "GET") return getBarbershopSettings(env, shopId);
