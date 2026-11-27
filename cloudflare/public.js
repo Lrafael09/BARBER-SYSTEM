@@ -100,6 +100,7 @@ async function publicCatalog(env, slug) {
     shop,
     services: services.results || [],
     staff: staff.results || [],
+    barbers: staff.results || [],
     whatsapp: shop.whatsapp,
     logo_data: shop.logo_data,
     brand_color: shop.brand_color,
