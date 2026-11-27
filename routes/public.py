@@ -2,7 +2,7 @@
 BARBER-SYSTEM
 Rotas públicas da barbearia e identificação inicial de clientes.
 
-A busca pelos quatro últimos dígitos apresenta apenas nomes mascarados.
+A busca pelos quatro últimos dígitos apresenta os nomes correspondentes para confirmação.
 Os quatro dígitos servem para localizar cadastros, não para comprovar
 a identidade do cliente.
 """
@@ -70,7 +70,7 @@ def lookup_customer(slug):
     """
     Localiza possíveis cadastros pelos quatro últimos dígitos do telefone.
 
-    Retorna somente IDs e nomes mascarados; nunca retorna telefone completo.
+    Retorna IDs e nomes para seleção; nunca retorna telefone completo.
     """
 
     data = request.get_json(silent=True)
