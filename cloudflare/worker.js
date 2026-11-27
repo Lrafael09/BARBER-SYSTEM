@@ -156,8 +156,13 @@ export default {
       if (request.method === "GET" && ["/", "/admin", "/admin/"].includes(url.pathname)) {
         response = Response.redirect(new URL("/admin/panel", url), 302);
       } else if (request.method === "GET" && (url.pathname === "/admin/panel" || url.pathname === "/admin/panel/")) {
-        const target = new URL("/admin/panel/index.html", url);
-        response = await env.ASSETS.fetch(new Request(target, request));
+        const currentSession = await readSession(request, env);
+        if (currentSession?.role === "barber") {
+          response = Response.redirect(new URL("/barber/" + currentSession.barbershop_slug, url), 303);
+        } else {
+          const target = new URL("/admin/panel/index.html", url);
+          response = await env.ASSETS.fetch(new Request(target, request));
+        }
       } else if (request.method === "GET" && /^\/barber\/[a-z0-9-]+$/.test(url.pathname)) {
         const slug = url.pathname.split("/")[2];
         const target = new URL("/barber.html?slug=" + encodeURIComponent(slug), url);
