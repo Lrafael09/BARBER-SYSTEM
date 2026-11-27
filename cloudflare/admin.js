@@ -397,7 +397,7 @@ async function saveService(request, env, shopId, serviceId = null) {
   if (!name || name.length > 120 || (description && description.length > 500)) {
     return json({ error: "Informe nome válido e descrição de até 500 caracteres." }, 400);
   }
-  if (!Number.isSafeInteger(price) || price < 0 || price > 100000000) return json({ error: "Informe um preço válido em reais." }, 400);
+  if (!Number.isSafeInteger(price) || price <= 0 || price > 100000000) return json({ error: "Informe um preço válido em reais." }, 400);
   if (!Number.isSafeInteger(duration) || duration < 1 || duration > 1440) return json({ error: "A duração deve estar entre 1 e 1440 minutos." }, 400);
   let active = existing ? Boolean(existing.is_active) : true;
   if (data.is_active !== undefined) {
@@ -551,6 +551,7 @@ async function saveBarbershopLogo(request, env, shopId) {
   const form = await request.formData().catch(() => null);
   const image = form?.get("logo");
   if (!image || typeof image.arrayBuffer !== "function") return json({ error: "Selecione uma imagem para enviar." }, 400);
+  if (Number(image.size) > 512 * 1024) return json({ error: "A imagem deve ter no máximo 512 KB." }, 400);
   const buffer = new Uint8Array(await image.arrayBuffer());
   if (!buffer.length || buffer.length > 512 * 1024) return json({ error: "A imagem deve ter no máximo 512 KB." }, 400);
   let mime = null;
@@ -756,7 +757,7 @@ async function saveProduct(request, env, shopId, productId = null) {
     if (typeof data.is_active !== "boolean") return json({ error: "is_active deve ser verdadeiro ou falso." }, 400);
     active = data.is_active;
   }
-  if (!name || name.length > 120 || (description && description.length > 500) || !Number.isSafeInteger(price) || price < 0) {
+  if (!name || name.length > 120 || (description && description.length > 500) || !Number.isSafeInteger(price) || price <= 0) {
     return json({ error: "Nome, descrição ou preço inválidos." }, 400);
   }
   if (productId) {
