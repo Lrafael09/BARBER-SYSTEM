@@ -8,6 +8,7 @@ This branch is the isolated Cloudflare migration. The original Flask application
 - Authentication and legacy password verification are in `cloudflare/passwords.js`.
 - Public customer and booking APIs are in `cloudflare/public.js`.
 - Professional agenda, commissions and service completion are in `cloudflare/barber.js`.
+- Owner financial settings, daily goals and cashbook APIs are in `cloudflare/admin.js`.
 - D1 binding is configured in `wrangler.toml`.
 - Static assets will be served from `public/`.
 
@@ -52,8 +53,19 @@ Closing a service updates the appointment, calculates the professional's commiss
 
 This phase is backend-only. The existing Flask HTML pages still call Flask endpoints and must be connected to the Cloudflare API in the later interface phase.
 
+## Administrator finance migration
+Owner-only endpoints:
+- `GET /api/admin/finance/config` and `PUT /api/admin/finance/config` for fixed costs and desired profit.
+- `GET /api/admin/finance/summary?period=today|week|month|year`.
+- `GET /api/admin/finance/entries?from=YYYY-MM-DD&to=YYYY-MM-DD`.
+- `POST /api/admin/finance/entries` for manual income or expense entries.
+- `DELETE /api/admin/finance/entries/:id` for manual entries only.
+- `PUT /api/admin/finance/goals` for explicitly configured daily, weekly and monthly goals.
+
+The summary keeps the existing business rule: monthly revenue target equals fixed costs plus desired profit; the daily target divides that amount by the number of open days in the month; the weekly target adds the daily targets for the open days in that week. Completed appointments are reconciled into the cashbook without duplicating entries.
+
 ## Remaining migration
-Professional agenda operations, staff/admin APIs, financial operations and HTML integration must be migrated and tested before this branch can replace the existing application.
+Owner dashboard, staff and service management, shop settings, admin appointment management and the HTML interfaces still need to be migrated and tested before this branch can replace the existing application.
 
 ## Local development
 1. Install Node.js LTS.
