@@ -1,13 +1,6 @@
 """
 BARBER-SYSTEM
 Gerenciamento do banco de dados SQLite.
-
-Responsabilidades:
-- Abrir e reutilizar a conexão durante uma requisição.
-- Fechar a conexão ao final do contexto Flask.
-- Criar as tabelas fundamentais do sistema.
-
-O banco é criado automaticamente em instance/barber.db.
 """
 
 import sqlite3
@@ -34,7 +27,6 @@ def close_db(error=None):
     """Fecha a conexão ao final da requisição ou contexto."""
 
     db = g.pop("db", None)
-
     if db is not None:
         db.close()
 
@@ -54,7 +46,6 @@ def init_db():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- Contas de acesso do proprietário e dos colaboradores.
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             barbershop_id INTEGER NOT NULL,
@@ -71,9 +62,6 @@ def init_db():
             UNIQUE (barbershop_id, email)
         );
 
-        -- Cadastro permanente do cliente dentro de cada barbearia.
-        -- phone guarda o telefone completo normalizado; phone_last4
-        -- permite localizar candidatos sem buscar pelo telefone inteiro.
         CREATE TABLE IF NOT EXISTS customers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             barbershop_id INTEGER NOT NULL,
@@ -87,7 +75,6 @@ def init_db():
             CHECK (length(phone_last4) = 4)
         );
 
-        -- Catálogo de serviços oferecidos pela barbearia.
         CREATE TABLE IF NOT EXISTS services (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             barbershop_id INTEGER NOT NULL,
@@ -103,8 +90,6 @@ def init_db():
                 REFERENCES barbershops (id) ON DELETE CASCADE
         );
 
-        -- Agendamentos. Os campos de snapshot preservam o nome,
-        -- preço e duração mesmo que o cadastro do serviço mude depois.
         CREATE TABLE IF NOT EXISTS appointments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             barbershop_id INTEGER NOT NULL,
@@ -118,23 +103,26 @@ def init_db():
             starts_at TEXT NOT NULL,
             ends_at TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'scheduled'
-                CHECK (status IN (
-                    'scheduled', 'completed', 'cancelled'
-                )),
+                CHECK (status IN ('scheduled', 'completed', 'cancelled')),
             cancellation_reason TEXT,
             cancelled_at TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (barbershop_id)
                 REFERENCES barbershops (id) ON DELETE CASCADE,
-            FOREIGN KEY (customer_id)
-                REFERENCES customers (id),
-            FOREIGN KEY (service_id)
-                REFERENCES services (id),
-            FOREIGN KEY (barber_id)
-                REFERENCES users (id)
+            FOREIGN KEY (customer_id) REFERENCES customers (id),
+            FOREIGN KEY (service_id) REFERENCES services (id),
+            FOREIGN KEY (barber_id) REFERENCES users (id)
         );
 
-        -- Índices para acelerar consultas comuns.
+        -- Contador persistente de tentativas de PIN por profissional,
+        -- barbearia e endereço IP. Os horários são gravados em UTC.
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            scope_key TEXT PRIMARY KEY,
+            failed_attempts INTEGER NOT NULL DEFAULT 0,
+            window_started_at INTEGER NOT NULL,
+            locked_until INTEGER
+        );
+
         CREATE INDEX IF NOT EXISTS idx_users_barbershop_role
             ON users (barbershop_id, role);
 
@@ -159,5 +147,4 @@ def init_app(app):
         "DATABASE",
         str(Path(app.instance_path) / "barber.db")
     )
-
     app.teardown_appcontext(close_db)
