@@ -1051,13 +1051,13 @@ def update_barber(barber_id):
         pin_hash = generate_password_hash(pin)
     if pin_hash:
         db.execute(
-            "UPDATE users SET name = ?, is_active = ?, pin_hash = ? WHERE id = ? AND barbershop_id = ?",
-            (name, int(is_active), pin_hash, barber_id, session["barbershop_id"])
+            "UPDATE users SET name = ?, is_active = ?, pin_hash = ?, can_serve = CASE WHEN ? = 1 THEN 1 ELSE can_serve END WHERE id = ? AND barbershop_id = ?",
+            (name, int(is_active), pin_hash, int(is_active), barber_id, session["barbershop_id"])
         )
     else:
         db.execute(
-            "UPDATE users SET name = ?, is_active = ? WHERE id = ? AND barbershop_id = ?",
-            (name, int(is_active), barber_id, session["barbershop_id"])
+            "UPDATE users SET name = ?, is_active = ?, can_serve = CASE WHEN ? = 1 THEN 1 ELSE can_serve END WHERE id = ? AND barbershop_id = ?",
+            (name, int(is_active), int(is_active), barber_id, session["barbershop_id"])
         )
     db.commit()
     return jsonify({"message": "Colaborador atualizado.", "barber": {
@@ -1069,7 +1069,7 @@ def update_barber(barber_id):
 @active_owner_required
 def deactivate_barber(barber_id):
     cursor = get_db().execute(
-        "UPDATE users SET is_active = 0, can_serve = 0 WHERE id = ? AND barbershop_id = ? AND role = 'barber'",
+        "UPDATE users SET is_active = 0 WHERE id = ? AND barbershop_id = ? AND role = 'barber'",
         (barber_id, session["barbershop_id"])
     )
     get_db().commit()
