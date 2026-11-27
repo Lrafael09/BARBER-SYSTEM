@@ -277,3 +277,242 @@ def public_business_schedule(slug):
         ],
         "weekday_reference": "0=segunda-feira, 6=domingo"
     }), 200
+
+
+
+@public_bp.route("/b/<slug>/appointments", methods=["POST"])
+def create_appointment(slug):
+    """
+    Cria um agendamento público respeitando expediente, intervalo,
+    bloqueios e conflitos de horário.
+    
+    Espera customer_id, service_id, barber_id e starts_at
+    (AAAA-MM-DDTHH:MM, horário local da barbearia).
+    """
+
+    from datetime import datetime
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie os dados do agendamento em JSON."}), 400
+
+    try:
+        customer_id = int(data.get("customer_id"))
+        service_id = int(data.get("service_id"))
+        barber_id = int(data.get("barber_id"))
+        starts_value = data.get("starts_at")
+        if not isinstance(starts_value, str):
+            raise ValueError
+        starts = datetime.fromisoformat(starts_value)
+        if starts.tzinfo is not None or starts.second or starts.microsecond:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "Informe cliente, serviço, barbeiro e data/hora válidos."
+        }), 400
+
+    if min(customer_id, service_id, barber_id) <= 0:
+        return jsonify({"error": "Os identificadores devem ser positivos."}), 400
+
+    barbershop = find_barbershop(slug)
+    if barbershop is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+
+    db = get_db()
+    service = db.execute(
+        """
+        SELECT id, name, price_cents, duration_minutes
+        FROM services
+        WHERE id = ? AND barbershop_id = ? AND is_active = 1
+        """,
+        (service_id, barbershop["id"])
+    ).fetchone()
+    customer = db.execute(
+        """
+        SELECT id FROM customers
+        WHERE id = ? AND barbershop_id = ?
+        """,
+        (customer_id, barbershop["id"])
+    ).fetchone()
+    barber = db.execute(
+        """
+        SELECT id FROM users
+        WHERE id = ? AND barbershop_id = ?
+          AND role = 'barber' AND is_active = 1
+        """,
+        (barber_id, barbershop["id"])
+    ).fetchone()
+
+    if service is None:
+        return jsonify({"error": "Serviço indisponível."}), 404
+    if customer is None:
+        return jsonify({"error": "Cliente não encontrado nesta barbearia."}), 404
+    if barber is None:
+        return jsonify({"error": "Barbeiro não encontrado nesta barbearia."}), 404
+
+    ends = starts + __import__("datetime").timedelta(
+        minutes=service["duration_minutes"]
+    )
+    starts_text = starts.strftime("%Y-%m-%dT%H:%M:%S")
+    ends_text = ends.strftime("%Y-%m-%dT%H:%M:%S")
+    weekday = starts.weekday()
+    date_text = starts.strftime("%Y-%m-%d")
+    start_clock = starts.strftime("%H:%M")
+    end_clock = ends.strftime("%H:%M")
+
+    # BEGIN IMMEDIATE serializa as tentativas de reserva no SQLite e
+    # reduz o risco de dois clientes ocuparem o mesmo horário simultaneamente.
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        hours = db.execute(
+            """
+            SELECT is_open, open_time, close_time, break_start, break_end
+            FROM business_hours
+            WHERE barbershop_id = ? AND weekday = ?
+            """,
+            (barbershop["id"], weekday)
+        ).fetchone()
+
+        if (
+            hours is None
+            or not hours["is_open"]
+            or start_clock < hours["open_time"]
+            or end_clock > hours["close_time"]
+        ):
+            db.rollback()
+            return jsonify({"error": "Esse horário está fora do expediente."}), 409
+
+        if (
+            hours["break_start"]
+            and start_clock < hours["break_end"]
+            and end_clock > hours["break_start"]
+        ):
+            db.rollback()
+            return jsonify({"error": "Esse horário coincide com o intervalo da barbearia."}), 409
+
+        block = db.execute(
+            """
+            SELECT id FROM time_blocks
+            WHERE barbershop_id = ?
+              AND (barber_id IS NULL OR barber_id = ?)
+              AND starts_at < ?
+              AND ends_at > ?
+            LIMIT 1
+            """,
+            (barbershop["id"], barber_id, ends_text, starts_text)
+        ).fetchone()
+
+        if block:
+            db.rollback()
+            return jsonify({"error": "O barbeiro ou a barbearia está indisponível nesse horário."}), 409
+
+        conflict = db.execute(
+            """
+            SELECT id FROM appointments
+            WHERE barbershop_id = ?
+              AND barber_id = ?
+              AND status = 'scheduled'
+              AND starts_at < ?
+              AND ends_at > ?
+            LIMIT 1
+            """,
+            (barbershop["id"], barber_id, ends_text, starts_text)
+        ).fetchone()
+
+        if conflict:
+            db.rollback()
+            return jsonify({"error": "Esse horário acabou de ser ocupado. Escolha outro."}), 409
+
+        cursor = db.execute(
+            """
+            INSERT INTO appointments (
+                barbershop_id, customer_id, service_id, barber_id,
+                service_name, price_cents, duration_minutes,
+                starts_at, ends_at, status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
+            """,
+            (
+                barbershop["id"],
+                customer_id,
+                service_id,
+                barber_id,
+                service["name"],
+                service["price_cents"],
+                service["duration_minutes"],
+                starts_text,
+                ends_text
+            )
+        )
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
+    return jsonify({
+        "message": "Agendamento realizado com sucesso.",
+        "appointment": {
+            "id": cursor.lastrowid,
+            "service": service["name"],
+            "price_cents": service["price_cents"],
+            "duration_minutes": service["duration_minutes"],
+            "starts_at": starts_text,
+            "ends_at": ends_text,
+            "status": "scheduled"
+        }
+    }), 201
+
+
+@public_bp.route("/b/<slug>/appointments/<int:appointment_id>/cancel", methods=["POST"])
+def cancel_public_appointment(slug, appointment_id):
+    """
+    Cancela um agendamento público usando telefone completo como dado
+    de conferência. Não equivale a autenticação forte do cliente.
+    """
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie o telefone para localizar o agendamento."}), 400
+
+    phone = normalize_phone(data.get("phone", ""))
+    if not 10 <= len(phone) <= 13:
+        return jsonify({"error": "Informe o telefone completo com DDD."}), 400
+
+    barbershop = find_barbershop(slug)
+    if barbershop is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+
+    db = get_db()
+    appointment = db.execute(
+        """
+        SELECT appointments.id, appointments.status
+        FROM appointments
+        INNER JOIN customers
+          ON customers.id = appointments.customer_id
+         AND customers.barbershop_id = appointments.barbershop_id
+        WHERE appointments.id = ?
+          AND appointments.barbershop_id = ?
+          AND customers.phone = ?
+        """,
+        (appointment_id, barbershop["id"], phone)
+    ).fetchone()
+
+    if appointment is None:
+        return jsonify({"error": "Agendamento não encontrado para esses dados."}), 404
+    if appointment["status"] != "scheduled":
+        return jsonify({"error": "Esse agendamento não está mais ativo."}), 409
+
+    db.execute(
+        """
+        UPDATE appointments
+        SET status = 'cancelled',
+            cancellation_reason = 'Cancelado pelo cliente',
+            cancelled_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND barbershop_id = ? AND status = 'scheduled'
+        """,
+        (appointment_id, barbershop["id"])
+    )
+    db.commit()
+
+    return jsonify({"message": "Agendamento cancelado com sucesso."}), 200
