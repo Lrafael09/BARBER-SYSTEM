@@ -389,7 +389,7 @@ $('walkin-customer').addEventListener('change',()=>{$('walkin-new-customer').cla
 $('save-walkin').addEventListener('click',async()=>{
  const payload={customer_id:$('walkin-customer').value?Number($('walkin-customer').value):null,customer_name:$('walkin-name').value,customer_phone:$('walkin-phone').value,service_id:Number($('walkin-service').value),barber_id:$('walkin-barber').value?Number($('walkin-barber').value):null};
  if(!payload.service_id){showMessage('walkin-message','Selecione o servi\xE7o.',true);return;}
- if(!payload.customer_id&&(!payload.customer_name.trim()||payload.customer_phone.replace(/\\\\D/g,'').length<10)){showMessage('walkin-message','Informe nome e telefone com DDD do cliente.',true);return;}
+ if(!payload.customer_id&&(!payload.customer_name.trim()||payload.customer_phone.replace(/\\D/g,'').length<10)){showMessage('walkin-message','Informe nome e telefone com DDD do cliente.',true);return;}
  $('save-walkin').disabled=true;
  try{const result=await api('/admin/walk-ins',{method:'POST',body:JSON.stringify(payload)});closeWalkInModal();await loadAgenda();await loadOverview();showMessage('agenda-message','Cliente adicionado \xE0 fila como n\xFAmero '+result.appointment.queue_number+'.');}
  catch(e){showMessage('walkin-message',e.message,true);}
@@ -1403,6 +1403,7 @@ loadStaff().catch(e=>message('login-message',e.message,true));
     $('saturday-note').classList.toggle('hidden',!walkIn);
     $('find-slots').classList.toggle('hidden',walkIn);
     if(walkIn){selectedSlot='';$('slots').replaceChildren();$('booking-summary').classList.add('hidden');message('slot-message','Atendimento presencial por ordem de chegada.');}
+    else {message('slot-message','');}
   }
   function refreshSummary() {
     const service = catalog.services.find(x => String(x.id) === $('service').value);
