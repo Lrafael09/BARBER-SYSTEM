@@ -819,6 +819,143 @@ def cancel_barber_appointment(appointment_id):
 
 
 
+@barber_bp.route("/appointments/<int:appointment_id>/status", methods=["PATCH"])
+@barber_required
+def update_barber_appointment_status(appointment_id):
+    """Permite ao colaborador alterar o status de um atendimento da própria agenda."""
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Informe o novo status."}), 400
+
+    new_status = data.get("status")
+    if new_status not in {"scheduled", "completed", "cancelled"}:
+        return jsonify({"error": "Status inválido."}), 400
+
+    reason = str(data.get("reason", "")).strip()
+    if new_status == "cancelled" and (not reason or len(reason) > 250):
+        return jsonify({"error": "Informe o motivo do cancelamento (até 250 caracteres)."}), 400
+
+    db = get_db()
+    db.execute("BEGIN IMMEDIATE")
+    appointment = db.execute(
+        """
+        SELECT appointments.id, appointments.service_name,
+               appointments.price_cents, appointments.starts_at,
+               appointments.ends_at, appointments.status,
+               appointments.commission_percent,
+               users.commission_percent AS current_commission_percent,
+               users.role
+        FROM appointments
+        INNER JOIN users
+          ON users.id = appointments.barber_id
+         AND users.barbershop_id = appointments.barbershop_id
+        WHERE appointments.id = ?
+          AND appointments.barbershop_id = ?
+          AND appointments.barber_id = ?
+          AND users.role = 'barber'
+        """,
+        (appointment_id, session["barbershop_id"], session["user_id"])
+    ).fetchone()
+
+    if appointment is None:
+        db.rollback()
+        return jsonify({"error": "Atendimento não encontrado na sua agenda de colaborador."}), 404
+
+    current_status = appointment["status"]
+    if current_status == new_status:
+        db.commit()
+        return jsonify({"message": "O atendimento já está com esse status."}), 200
+
+    if new_status == "scheduled":
+        conflict = db.execute(
+            """
+            SELECT id FROM appointments
+            WHERE barbershop_id = ?
+              AND barber_id = ?
+              AND id <> ?
+              AND status = 'scheduled'
+              AND starts_at < ?
+              AND ends_at > ?
+            LIMIT 1
+            """,
+            (session["barbershop_id"], session["user_id"], appointment_id,
+             appointment["ends_at"], appointment["starts_at"])
+        ).fetchone()
+        if conflict:
+            db.rollback()
+            return jsonify({"error": "Não é possível reabrir: esse horário já possui outro atendimento agendado."}), 409
+
+        db.execute(
+            """
+            UPDATE appointments
+            SET status = 'scheduled',
+                cancellation_reason = NULL,
+                cancelled_at = NULL,
+                commission_cents = 0
+            WHERE id = ? AND barbershop_id = ? AND barber_id = ?
+            """,
+            (appointment_id, session["barbershop_id"], session["user_id"])
+        )
+        db.execute(
+            "DELETE FROM finance_entries WHERE appointment_id = ? AND barbershop_id = ?",
+            (appointment_id, session["barbershop_id"])
+        )
+
+    elif new_status == "cancelled":
+        db.execute(
+            """
+            UPDATE appointments
+            SET status = 'cancelled',
+                cancellation_reason = ?,
+                cancelled_at = CURRENT_TIMESTAMP,
+                commission_cents = 0
+            WHERE id = ? AND barbershop_id = ? AND barber_id = ?
+            """,
+            (reason, appointment_id, session["barbershop_id"], session["user_id"])
+        )
+        db.execute(
+            "DELETE FROM finance_entries WHERE appointment_id = ? AND barbershop_id = ?",
+            (appointment_id, session["barbershop_id"])
+        )
+
+    else:
+        commission_percent = (
+            appointment["commission_percent"]
+            if appointment["commission_percent"] is not None
+            else (appointment["current_commission_percent"] or 0)
+        )
+        commission_cents = int((
+            Decimal(appointment["price_cents"]) * Decimal(str(commission_percent)) / Decimal("100")
+        ).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        db.execute(
+            """
+            UPDATE appointments
+            SET status = 'completed',
+                cancellation_reason = NULL,
+                cancelled_at = NULL,
+                commission_percent = ?,
+                commission_cents = ?
+            WHERE id = ? AND barbershop_id = ? AND barber_id = ?
+            """,
+            (commission_percent, commission_cents, appointment_id,
+             session["barbershop_id"], session["user_id"])
+        )
+        db.execute(
+            """
+            INSERT OR IGNORE INTO finance_entries
+                (barbershop_id, entry_type, description, category, amount_cents, entry_date, appointment_id)
+            VALUES (?, 'income', ?, 'Atendimentos', ?, date(?), ?)
+            """,
+            (session["barbershop_id"],
+             "Atendimento concluído: " + appointment["service_name"],
+             appointment["price_cents"], appointment["starts_at"], appointment_id)
+        )
+
+    db.commit()
+    return jsonify({"message": "Status do atendimento atualizado com sucesso."}), 200
+
+
 @barber_bp.route("/<slug>", methods=["GET"])
 def barber_panel_page(slug):
     """Entrega a interface de login e agenda individual do barbeiro."""
