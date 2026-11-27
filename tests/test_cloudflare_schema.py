@@ -14,6 +14,7 @@ class CloudflareBookingSchemaTests(unittest.TestCase):
         self.db.executescript((ROOT / "cloudflare" / "auth-sessions.sql").read_text(encoding="utf-8"))
         self.db.executescript((ROOT / "cloudflare" / "public-booking.sql").read_text(encoding="utf-8"))
         self.db.executescript((ROOT / "cloudflare" / "migrations" / "0002_multi_tenant.sql").read_text(encoding="utf-8"))
+        self.db.executescript((ROOT / "cloudflare" / "migrations" / "0005_staff_attendance.sql").read_text(encoding="utf-8"))
 
         self.shop_id = self.db.execute(
             "INSERT INTO barbershops(name,slug) VALUES('Barbearia Teste','barbearia-teste')"
@@ -90,6 +91,34 @@ class CloudflareBookingSchemaTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute(
                 "INSERT INTO barbershops(name,slug,whatsapp) VALUES('Outra','outra','11911112222')"
+            )
+
+
+    def test_staff_attendance_records_arrival_and_departure_once_per_day(self):
+        self.db.execute(
+            "INSERT INTO staff_attendance(barbershop_id,user_id,attendance_date,arrived_at) VALUES(?,?,?,?)",
+            (self.shop_id, self.barber_id, "2026-11-27", "2026-11-27T08:02:00"),
+        )
+        self.db.execute(
+            "UPDATE staff_attendance SET departed_at=? WHERE barbershop_id=? AND user_id=? AND attendance_date=?",
+            ("2026-11-27T17:45:00", self.shop_id, self.barber_id, "2026-11-27"),
+        )
+        row = self.db.execute(
+            "SELECT arrived_at,departed_at FROM staff_attendance WHERE barbershop_id=? AND user_id=? AND attendance_date=?",
+            (self.shop_id, self.barber_id, "2026-11-27"),
+        ).fetchone()
+        self.assertEqual(row, ("2026-11-27T08:02:00", "2026-11-27T17:45:00"))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO staff_attendance(barbershop_id,user_id,attendance_date) VALUES(?,?,?)",
+                (self.shop_id, self.barber_id, "2026-11-27"),
+            )
+
+    def test_staff_attendance_cannot_record_departure_before_arrival(self):
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO staff_attendance(barbershop_id,user_id,attendance_date,departed_at) VALUES(?,?,?,?)",
+                (self.shop_id, self.barber_id, "2026-11-27", "2026-11-27T17:45:00"),
             )
 
     def add_appointment(self, barber_id, starts_at, ends_at):
