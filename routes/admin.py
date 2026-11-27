@@ -813,7 +813,7 @@ def list_appointments():
 
     rows = get_db().execute(
         f"""
-        SELECT appointments.id, appointments.service_name,
+        SELECT appointments.id, appointments.barber_id, appointments.service_name,
                appointments.price_cents, appointments.duration_minutes,
                appointments.starts_at, appointments.ends_at,
                appointments.status, appointments.cancellation_reason,
