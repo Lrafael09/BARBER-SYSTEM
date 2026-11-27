@@ -11,7 +11,7 @@ Inclui:
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, render_template
 from werkzeug.security import generate_password_hash
 
 from database import get_db
@@ -845,3 +845,11 @@ def cancel_appointment_admin(appointment_id):
         }), 404
 
     return jsonify({"message": "Agendamento cancelado com sucesso."}), 200
+
+
+
+@admin_bp.route("/panel", methods=["GET"])
+def admin_panel_page():
+    """Entrega a interface do proprietário; os dados seguem protegidos pelas APIs."""
+
+    return render_template("admin.html")
