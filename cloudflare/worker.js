@@ -57,13 +57,13 @@ async function api(request, env, url) {
   }
   if(url.pathname==="/api/auth/register"&&request.method==="POST"){
    const d=await request.json().catch(()=>null); if(!d)return json({error:"Envie os dados em JSON."},400);
-   const shop=String(d.shop_name||"").trim(),name=String(d.owner_name||"").trim(),email=String(d.email||"").trim().toLowerCase(),pass=d.password,wa=String(d.whatsapp||"").replace(/\\D/g,"");
+   const shop=String(d.shop_name||"").trim(),name=String(d.owner_name||"").trim(),email=String(d.email||"").trim().toLowerCase(),pass=d.password,wa=String(d.whatsapp||"").replace(/\D/g,"");
    if(!shop||!name||!email||!pass)return json({error:"Preencha todos os campos."},400);
-   if(shop.length>120||name.length>120||!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))return json({error:"Confira os dados informados."},400);
+   if(shop.length>120||name.length>120||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return json({error:"Confira os dados informados."},400);
    if(typeof pass!=="string"||pass.length<8)return json({error:"A senha deve ter pelo menos 8 caracteres."},400);
    if(env.OWNER_REGISTRATION_ENABLED!=="true")return json({error:"Cadastro inicial desativado."},403);
    const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM barbershops").first(); if(count.n)return json({error:"Já existe um proprietário cadastrado."},409);
-   const base=shop.normalize("NFKD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); if(!base)return json({error:"Nome inválido para endereço."},400);
+   const base=shop.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); if(!base)return json({error:"Nome inválido para endereço."},400);
    let slug=base,i=2; while(await env.DB.prepare("SELECT id FROM barbershops WHERE slug=?").bind(slug).first())slug=base+"-"+i++;
    const created=await env.DB.prepare("INSERT INTO barbershops(name,slug,whatsapp) VALUES(?,?,?)").bind(shop,slug,wa||null).run();
    await env.DB.prepare("INSERT INTO users(barbershop_id,name,email,password_hash,role,can_serve) VALUES(?,?,?,?,'owner',0)").bind(created.meta.last_row_id,name,email,await hashPassword(pass)).run();
@@ -95,7 +95,7 @@ async function api(request, env, url) {
    const slug=String(d.slug||"").trim().toLowerCase();
    const barberId=Number(d.barber_id);
    const pin=d.pin;
-   if(!/^[a-z0-9-]{1,120}$/.test(slug)||!Number.isSafeInteger(barberId)||barberId<1||typeof pin!=="string"||!/^\\d{4}$/.test(pin))return json({error:"Selecione o profissional e informe um PIN de quatro números."},400);
+   if(!/^[a-z0-9-]{1,120}$/.test(slug)||!Number.isSafeInteger(barberId)||barberId<1||typeof pin!=="string"||!/^\d{4}$/.test(pin))return json({error:"Selecione o profissional e informe um PIN de quatro números."},400);
    const user=await env.DB.prepare("SELECT u.id,u.barbershop_id,u.name,u.pin_hash,u.role,u.can_serve,u.commission_percent,b.slug FROM users u JOIN barbershops b ON b.id=u.barbershop_id WHERE b.slug=? AND u.id=? AND u.role IN ('barber','owner') AND u.is_active=1 AND (u.role='barber' OR u.can_serve=1)").bind(slug,barberId).first();
    if(!user||!user.pin_hash)return json({error:"PIN ou acesso inválido."},401);
    const ip=request.headers.get("CF-Connecting-IP")||"unknown";
