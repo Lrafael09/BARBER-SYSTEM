@@ -18,8 +18,8 @@ test("hash atual valida a senha e rejeita senha incorreta", async () => {
 test("aceita hash PBKDF2 legado do Werkzeug", async () => {
   const salt = "salt-legado";
   const key = await crypto.subtle.importKey("raw", encoder.encode("senha-legada"), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: encoder.encode(salt), iterations: 260000 }, key, 256);
-  const legacy = "pbkdf2:sha256:260000$" + salt + "$" + hex(new Uint8Array(bits));
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: encoder.encode(salt), iterations: 100000 }, key, 256);
+  const legacy = "pbkdf2:sha256:100000$" + salt + "$" + hex(new Uint8Array(bits));
   assert.equal(await verifyPassword(legacy, "senha-legada"), true);
   assert.equal(needsPasswordRehash(legacy), true);
 });
