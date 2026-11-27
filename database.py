@@ -114,6 +114,59 @@ def init_db():
             FOREIGN KEY (barber_id) REFERENCES users (id)
         );
 
+        -- Horários semanais da barbearia. weekday: 0=segunda ... 6=domingo.
+        CREATE TABLE IF NOT EXISTS business_hours (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barbershop_id INTEGER NOT NULL,
+            weekday INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+            is_open INTEGER NOT NULL DEFAULT 0 CHECK (is_open IN (0, 1)),
+            open_time TEXT,
+            close_time TEXT,
+            break_start TEXT,
+            break_end TEXT,
+            UNIQUE (barbershop_id, weekday),
+            FOREIGN KEY (barbershop_id)
+                REFERENCES barbershops (id) ON DELETE CASCADE,
+            CHECK (
+                (is_open = 0) OR
+                (
+                    open_time IS NOT NULL
+                    AND close_time IS NOT NULL
+                    AND close_time > open_time
+                )
+            ),
+            CHECK (
+                (break_start IS NULL AND break_end IS NULL) OR
+                (
+                    break_start IS NOT NULL
+                    AND break_end IS NOT NULL
+                    AND break_end > break_start
+                    AND break_start > open_time
+                    AND break_end < close_time
+                )
+            )
+        );
+
+        -- Folgas, férias e bloqueios de horário da barbearia ou de um barbeiro.
+        -- starts_at e ends_at usam ISO 8601 em horário local da barbearia.
+        CREATE TABLE IF NOT EXISTS time_blocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barbershop_id INTEGER NOT NULL,
+            barber_id INTEGER,
+            starts_at TEXT NOT NULL,
+            ends_at TEXT NOT NULL,
+            reason TEXT,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (barbershop_id)
+                REFERENCES barbershops (id) ON DELETE CASCADE,
+            FOREIGN KEY (barber_id)
+                REFERENCES users (id),
+            FOREIGN KEY (created_by)
+                REFERENCES users (id),
+            CHECK (ends_at > starts_at)
+        );
+
         -- Contador persistente de tentativas de PIN por profissional,
         -- barbearia e endereço IP. Os horários são gravados em UTC.
         CREATE TABLE IF NOT EXISTS login_attempts (
@@ -134,6 +187,12 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_appointments_barber_schedule
             ON appointments (barbershop_id, barber_id, starts_at, status);
+
+        CREATE INDEX IF NOT EXISTS idx_time_blocks_schedule
+            ON time_blocks (barbershop_id, starts_at, ends_at);
+
+        CREATE INDEX IF NOT EXISTS idx_time_blocks_barber_schedule
+            ON time_blocks (barbershop_id, barber_id, starts_at, ends_at);
         """
     )
 
