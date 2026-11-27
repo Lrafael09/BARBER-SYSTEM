@@ -1,4 +1,5 @@
 import { hashPassword, verifyPassword, needsPasswordRehash } from "./passwords.js";
+import { handlePublicApi } from "./public.js";
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
   status,
@@ -127,18 +128,8 @@ async function api(request, env, url) {
    return json({message:"Logout realizado com sucesso."},200,{"set-cookie":sessionCookie("",0)});
   }
 
-  const shopMatch = url.pathname.match(/^\/api\/public\/shops\/([a-z0-9-]+)\/catalog$/);
-  if (shopMatch && request.method === "GET") {
-    const shop = await env.DB.prepare(
-      "SELECT id, name, slug, whatsapp, brand_color, theme FROM barbershops WHERE slug = ?"
-    ).bind(shopMatch[1]).first();
-    if (!shop) return json({ error: "Barbearia não encontrada." }, 404);
-    const [services, staff] = await Promise.all([
-      env.DB.prepare("SELECT id, name, description, price_cents, duration_minutes FROM services WHERE barbershop_id = ? AND is_active = 1 ORDER BY name").bind(shop.id).all(),
-      env.DB.prepare("SELECT id, name FROM users WHERE barbershop_id = ? AND role = 'barber' AND is_active = 1 AND can_serve = 1 ORDER BY name").bind(shop.id).all()
-    ]);
-    return json({ shop, services: services.results, staff: staff.results });
-  }
+  const publicResponse = await handlePublicApi(request, env, url);
+  if (publicResponse) return publicResponse;
 
   return json({ error: "Rota ainda não migrada.", path: url.pathname }, 501);
 }
