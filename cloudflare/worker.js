@@ -91,6 +91,7 @@ async function api(request, env, url) {
      await env.DB.prepare("UPDATE barbershops SET name=?,slug=?,whatsapp=? WHERE id=?").bind(shop,slug,wa,barbershopId).run();
     }
    }catch(error){
+    console.error("BARBER_REGISTER_FAILED", { name: error?.name, message: error?.message, stack: error?.stack });
     if(createdNewShop)await env.DB.prepare("DELETE FROM barbershops WHERE id=? AND NOT EXISTS (SELECT 1 FROM users WHERE barbershop_id=?)").bind(barbershopId,barbershopId).run();
     if(String(error?.message||"").toLowerCase().includes("unique"))return json({error:"Este e-mail ou WhatsApp já está em uso, ou esta barbearia já possui proprietário. Confira os dados e tente novamente."},409);
     throw error;
