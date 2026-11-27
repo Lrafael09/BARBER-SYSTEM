@@ -167,6 +167,12 @@ class BarberSystemTests(unittest.TestCase):
         })
         self.assertEqual(booking_b.status_code, 201, booking_b.get_json())
 
+        # O proprietário pode remover o expediente individual e voltar a herdar o geral.
+        reset_schedule = self.client.delete(f"/admin/staff/{first_id}/schedule")
+        self.assertEqual(reset_schedule.status_code, 200, reset_schedule.get_json())
+        inherited_schedule = self.client.get(f"/admin/staff/{first_id}/schedule").get_json()
+        self.assertTrue(inherited_schedule["uses_business_hours_when_unset"])
+
         # O link único lista profissionais e o PIN abre somente a agenda selecionada.
         staff = self.client.get(f"/barber/{slug}/staff")
         self.assertEqual(staff.status_code, 200, staff.get_json())
