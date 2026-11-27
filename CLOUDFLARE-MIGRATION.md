@@ -5,11 +5,12 @@ This branch is the isolated Cloudflare migration. The original Flask application
 ## Current foundation
 - D1 schema is in `cloudflare/schema.sql`.
 - Worker entrypoint is `cloudflare/worker.js`.
-- Password verification is in `cloudflare/passwords.js`.
+- Authentication and legacy password verification are in `cloudflare/passwords.js`.
+- Public customer and booking APIs are in `cloudflare/public.js`.
 - D1 binding is configured in `wrangler.toml`.
 - Static assets will be served from `public/`.
 
-## Authentication migration — first phase
+## Authentication migration
 - Owner registration and email/password login remain available through `/api/auth/*`.
 - Barber PIN login is available at `POST /api/auth/barber/login` with `slug`, `barber_id` and `pin`.
 - Barber session checks and logout are available at `GET /api/auth/barber/me` and `POST /api/auth/barber/logout`.
@@ -17,15 +18,30 @@ This branch is the isolated Cloudflare migration. The original Flask application
 - PIN attempts are tracked per shop, professional and client IP; five failures trigger a 15-minute lock.
 - The session cookie is HttpOnly, Secure and SameSite=Lax.
 
+## Public booking migration
+All routes below use the barbershop slug:
+- `GET /api/public/shops/:slug/catalog`
+- `GET /api/public/shops/:slug/schedule`
+- `POST /api/public/shops/:slug/customers`
+- `POST /api/public/shops/:slug/customers/lookup`
+- `POST /api/public/shops/:slug/customers/confirm`
+- `GET /api/public/shops/:slug/availability?service_id=...&barber_id=...&date=YYYY-MM-DD`
+- `POST /api/public/shops/:slug/appointments`
+- `POST /api/public/shops/:slug/appointments/:id/cancel`
+
+The public booking API checks active services and professionals, shop and individual opening hours, breaks, time blocks and existing appointments. A D1 trigger in `cloudflare/public-booking.sql` prevents overlapping appointments and time-block conflicts even if two booking requests arrive at nearly the same time.
+
+The four last phone digits only locate possible customer records; they do not prove customer identity. Public cancellation checks the complete phone number, matching the behavior of the existing Flask app.
+
 This phase is backend-only. The existing Flask HTML pages still call Flask endpoints and must be connected to the Cloudflare API in the later interface phase.
 
 ## Remaining migration
-Public booking, availability, cancellations, staff/admin APIs, financial operations and HTML integration must be migrated and tested before this branch can replace the existing application.
+Professional agenda operations, staff/admin APIs, financial operations and HTML integration must be migrated and tested before this branch can replace the existing application.
 
 ## Local development
 1. Install Node.js LTS.
 2. Run `npm install`.
-3. Apply `cloudflare/schema.sql` and `cloudflare/auth-sessions.sql` to the D1 database.
+3. Apply `cloudflare/schema.sql`, `cloudflare/auth-sessions.sql` and `cloudflare/public-booking.sql` to the D1 database.
 4. Run `npx wrangler login`.
 5. Run `npm test`.
 6. Run `npm run dev`.
