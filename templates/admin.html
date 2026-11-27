@@ -149,7 +149,7 @@ const messages = ['overview','agenda','services','products','team','customers','
 function showMessage(id, text, error=false){ const el=$(id); if(!el)return; el.textContent=text||''; el.classList.toggle('error',!!error); }
 function money(cents){ return 'R$ '+(Number(cents||0)/100).toFixed(2).replace('.',','); }
 function toLocalInputDate(date){ return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,10); }
-function parseMoney(value){ return String(value||'').trim().replace(/\./g,'').replace(',','.'); }
+function parseMoney(value){ const raw=String(value||'').trim().replace(/R\$|\s/g,''); return raw.includes(',')?raw.replace(/\./g,'').replace(',','.'):raw; }
 async function api(path, options={}){
  const headers={...(options.headers||{})};
  if(options.body && !(options.body instanceof FormData)) headers['Content-Type']='application/json';
