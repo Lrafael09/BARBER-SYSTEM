@@ -43,6 +43,7 @@ def init_db():
             name TEXT NOT NULL,
             slug TEXT NOT NULL UNIQUE,
             whatsapp TEXT,
+            logo_data TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -195,6 +196,11 @@ def init_db():
             ON time_blocks (barbershop_id, barber_id, starts_at, ends_at);
         """
     )
+
+    # Migração segura para bancos criados antes do recurso de logotipo.
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(barbershops)").fetchall()}
+    if "logo_data" not in columns:
+        db.execute("ALTER TABLE barbershops ADD COLUMN logo_data TEXT")
 
     db.commit()
 
