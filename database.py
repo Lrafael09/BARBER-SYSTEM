@@ -209,6 +209,19 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS staff_breaks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barbershop_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            weekday INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+            break_start TEXT NOT NULL,
+            break_end TEXT NOT NULL,
+            UNIQUE (barbershop_id, user_id, weekday),
+            FOREIGN KEY (barbershop_id) REFERENCES barbershops (id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+            CHECK (break_end > break_start)
+        );
+
         CREATE TABLE IF NOT EXISTS finance_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             barbershop_id INTEGER NOT NULL,
