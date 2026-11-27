@@ -290,7 +290,7 @@ def create_appointment(slug):
     (AAAA-MM-DDTHH:MM, horário local da barbearia).
     """
 
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -350,13 +350,12 @@ def create_appointment(slug):
     if barber is None:
         return jsonify({"error": "Barbeiro não encontrado nesta barbearia."}), 404
 
-    ends = starts + __import__("datetime").timedelta(
-        minutes=service["duration_minutes"]
-    )
+    ends = starts + timedelta(minutes=service["duration_minutes"])
+    if ends.date() != starts.date():
+        return jsonify({"error": "O serviço precisa terminar no mesmo dia."}), 409
     starts_text = starts.strftime("%Y-%m-%dT%H:%M:%S")
     ends_text = ends.strftime("%Y-%m-%dT%H:%M:%S")
     weekday = starts.weekday()
-    date_text = starts.strftime("%Y-%m-%d")
     start_clock = starts.strftime("%H:%M")
     end_clock = ends.strftime("%H:%M")
 
@@ -503,7 +502,7 @@ def cancel_public_appointment(slug, appointment_id):
     if appointment["status"] != "scheduled":
         return jsonify({"error": "Esse agendamento não está mais ativo."}), 409
 
-    db.execute(
+    cursor = db.execute(
         """
         UPDATE appointments
         SET status = 'cancelled',
@@ -514,5 +513,8 @@ def cancel_public_appointment(slug, appointment_id):
         (appointment_id, barbershop["id"])
     )
     db.commit()
+
+    if cursor.rowcount == 0:
+        return jsonify({"error": "Esse agendamento já foi alterado."}), 409
 
     return jsonify({"message": "Agendamento cancelado com sucesso."}), 200
