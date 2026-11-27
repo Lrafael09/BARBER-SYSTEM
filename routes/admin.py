@@ -909,7 +909,31 @@ def cancel_appointment_admin(appointment_id):
 
 @admin_bp.route("/panel", methods=["GET"])
 def admin_panel_page():
-    """Entrega sempre a interface de administração do proprietário."""
+    """Entrega o painel ao proprietário e redireciona profissionais."""
+
+    if session.get("user_role") == "barber":
+        db = get_db()
+        staff = db.execute(
+            """
+            SELECT id
+            FROM users
+            WHERE id = ?
+              AND barbershop_id = ?
+              AND role IN ('barber', 'owner')
+              AND is_active = 1
+              AND (role = 'barber' OR can_serve = 1)
+            """,
+            (session.get("user_id"), session.get("barbershop_id"))
+        ).fetchone()
+        shop = db.execute(
+            "SELECT slug FROM barbershops WHERE id = ?",
+            (session.get("barbershop_id"),)
+        ).fetchone() if staff else None
+
+        if staff and shop:
+            return redirect(f"/barber/{shop['slug']}", code=303)
+
+        session.clear()
 
     return render_template("admin.html")
 
