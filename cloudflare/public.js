@@ -229,6 +229,10 @@ async function publicAvailability(env, slug, url) {
   }
   const localNow = saoPauloDateTime();
   if (day.value < localNow.date) return json({ error: "Não é possível consultar horários em uma data passada." }, 400);
+  if (day.weekday === 5) return json({
+    date: day.value, slots: [], walk_in_only: true,
+    message: "Aos sábados, o atendimento é por ordem de chegada. Não fazemos agendamentos."
+  });
   const [service, barber] = await Promise.all([
     getService(env, shop.id, serviceId),
     getBookableBarber(env, shop.id, barberId)
@@ -268,7 +272,7 @@ async function publicAvailability(env, slug, url) {
   if (!Number.isSafeInteger(duration) || duration < 1 || duration > 1440) {
     return json({ error: "A duração do serviço está configurada incorretamente." }, 500);
   }
-  for (let candidate = opening; candidate + duration <= closing; candidate += 15) {
+  for (let candidate = opening; candidate + duration <= closing; candidate += 30) {
     const end = candidate + duration;
     if (candidate < businessOpening || end > businessClosing) continue;
     if (day.value === localNow.date && candidate <= localNow.minutes) continue;
@@ -296,6 +300,9 @@ async function createAppointment(request, env, slug) {
     return json({ error: "Informe cliente, serviço, barbeiro e data/hora válidos." }, 400);
   }
   const startMinutes = Number(match[2]) * 60 + Number(match[3]);
+  if (day.weekday === 5) return json({
+    error: "Aos sábados, o atendimento é por ordem de chegada. Não é possível agendar horário."
+  }, 409);
   const localNow = saoPauloDateTime();
   const requestedLocalStart = day.value + "T" + match[2] + ":" + match[3];
   if (day.value < localNow.date || requestedLocalStart <= localNow.date + "T" + localNow.time) {
@@ -329,7 +336,8 @@ async function createAppointment(request, env, slug) {
   const effectiveClosing = parseClock(effective.close_time);
   if ([opening, closing, effectiveOpening, effectiveClosing].some(value => value === null) ||
       startMinutes < opening || endMinutes > closing ||
-      startMinutes < effectiveOpening || endMinutes > effectiveClosing) {
+      startMinutes < effectiveOpening || endMinutes > effectiveClosing ||
+      (startMinutes - effectiveOpening) % 30 !== 0) {
     return json({ error: "Esse horário está fora do expediente da barbearia ou do profissional." }, 409);
   }
   const breaks = [
