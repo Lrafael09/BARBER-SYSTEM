@@ -1,8 +1,4 @@
-"""Testes básicos de integração do BARBER-SYSTEM.
-
-Execute na raiz do projeto com:
-    python -m unittest discover -s tests -v
-"""
+"""Testes básicos de integração do BARBER-SYSTEM."""
 
 import tempfile
 import unittest
@@ -54,29 +50,46 @@ class BarberSystemSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("today", response.get_json())
 
+    def test_registration_is_hidden_after_first_owner(self):
+        self.assertTrue(self.client.get("/auth/registration-status").get_json()["available"])
+        self.register_and_login_owner()
+        self.assertFalse(self.client.get("/auth/registration-status").get_json()["available"])
+        second = self.client.post("/auth/register", json={
+            "shop_name": "Outra Barbearia",
+            "owner_name": "Outro Dono",
+            "email": "outro@example.com",
+            "password": "senha-forte-456"
+        })
+        self.assertEqual(second.status_code, 409)
+
+    def test_registration_can_be_disabled_in_code(self):
+        self.app.config["OWNER_REGISTRATION_ENABLED"] = False
+        status = self.client.get("/auth/registration-status")
+        self.assertFalse(status.get_json()["available"])
+        response = self.client.post("/auth/register", json={
+            "shop_name": "Barbearia Bloqueada",
+            "owner_name": "Dono",
+            "email": "bloqueado@example.com",
+            "password": "senha-forte-789"
+        })
+        self.assertEqual(response.status_code, 403)
+
     def test_owner_can_create_service_and_barber(self):
         self.register_and_login_owner()
-
         service = self.client.post("/admin/services", json={
-            "name": "Corte",
-            "description": "Corte tradicional",
-            "price": "35.00",
-            "duration_minutes": 30
+            "name": "Corte", "description": "Corte tradicional",
+            "price": "35.00", "duration_minutes": 30
         })
         self.assertEqual(service.status_code, 201)
-
         barber = self.client.post("/admin/barbers", json={
-            "name": "Profissional Teste",
-            "pin": "1234"
+            "name": "Profissional Teste", "pin": "1234"
         })
         self.assertEqual(barber.status_code, 201)
         self.assertIn("id", barber.get_json()["barber"])
 
     def test_private_panels_reject_anonymous_access(self):
-        admin = self.client.get("/admin/dashboard")
-        barber = self.client.get("/barber/me")
-        self.assertEqual(admin.status_code, 401)
-        self.assertEqual(barber.status_code, 401)
+        self.assertEqual(self.client.get("/admin/dashboard").status_code, 401)
+        self.assertEqual(self.client.get("/barber/me").status_code, 401)
 
     def test_unknown_public_barbershop_returns_404(self):
         response = self.client.get("/b/barbearia-inexistente/book")
