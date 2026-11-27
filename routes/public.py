@@ -337,8 +337,8 @@ def create_appointment(slug):
     barber = db.execute(
         """
         SELECT id FROM users
-        WHERE id = ? AND barbershop_id = ?
-          AND role = 'barber' AND is_active = 1
+        WHERE id = ? AND barbershop_id = ? AND is_active = 1
+          AND (role = 'barber' OR (role = 'owner' AND can_serve = 1))
         """,
         (barber_id, barbershop["id"])
     ).fetchone()
@@ -371,23 +371,31 @@ def create_appointment(slug):
             """,
             (barbershop["id"], weekday)
         ).fetchone()
+        personal_hours = db.execute(
+            """
+            SELECT is_open, open_time, close_time, break_start, break_end
+            FROM staff_hours
+            WHERE barbershop_id = ? AND user_id = ? AND weekday = ?
+            """,
+            (barbershop["id"], barber_id, weekday)
+        ).fetchone()
+        effective_hours = personal_hours if personal_hours is not None else hours
 
         if (
-            hours is None
-            or not hours["is_open"]
-            or start_clock < hours["open_time"]
-            or end_clock > hours["close_time"]
+            hours is None or not hours["is_open"]
+            or effective_hours is None or not effective_hours["is_open"]
+            or start_clock < hours["open_time"] or end_clock > hours["close_time"]
+            or start_clock < effective_hours["open_time"]
+            or end_clock > effective_hours["close_time"]
         ):
             db.rollback()
-            return jsonify({"error": "Esse horário está fora do expediente."}), 409
+            return jsonify({"error": "Esse horário está fora do expediente da barbearia ou do profissional."}), 409
 
-        if (
-            hours["break_start"]
-            and start_clock < hours["break_end"]
-            and end_clock > hours["break_start"]
-        ):
-            db.rollback()
-            return jsonify({"error": "Esse horário coincide com o intervalo da barbearia."}), 409
+        for schedule in (hours, personal_hours):
+            if schedule is not None and schedule["break_start"]:
+                if start_clock < schedule["break_end"] and end_clock > schedule["break_start"]:
+                    db.rollback()
+                    return jsonify({"error": "Esse horário coincide com um intervalo."}), 409
 
         block = db.execute(
             """
@@ -533,7 +541,9 @@ def public_booking_page(slug):
         "booking.html",
         barbershop_name=barbershop["name"],
         barbershop_slug=barbershop["slug"],
-        barbershop_logo=barbershop["logo_data"]
+        barbershop_logo=barbershop["logo_data"],
+        brand_color=barbershop["brand_color"],
+        theme=barbershop["theme"]
     )
 
 
@@ -558,9 +568,10 @@ def public_booking_catalog(slug):
 
     barbers = db.execute(
         """
-        SELECT id, name
+        SELECT id, name, role
         FROM users
-        WHERE barbershop_id = ? AND role = 'barber' AND is_active = 1
+        WHERE barbershop_id = ? AND is_active = 1
+          AND (role = 'barber' OR (role = 'owner' AND can_serve = 1))
         ORDER BY name COLLATE NOCASE
         """,
         (barbershop["id"],)
@@ -570,7 +581,9 @@ def public_booking_catalog(slug):
         "services": [dict(row) for row in services],
         "barbers": [dict(row) for row in barbers],
         "whatsapp": barbershop["whatsapp"],
-        "logo_data": barbershop["logo_data"]
+        "logo_data": barbershop["logo_data"],
+        "brand_color": barbershop["brand_color"],
+        "theme": barbershop["theme"]
     }), 200
 
 
@@ -604,7 +617,8 @@ def public_availability(slug):
     barber = db.execute(
         """
         SELECT id FROM users
-        WHERE id = ? AND barbershop_id = ? AND role = 'barber' AND is_active = 1
+        WHERE id = ? AND barbershop_id = ? AND is_active = 1
+          AND (role = 'barber' OR (role = 'owner' AND can_serve = 1))
         """,
         (barber_id, barbershop["id"])
     ).fetchone()
@@ -612,7 +626,7 @@ def public_availability(slug):
     if service is None or barber is None:
         return jsonify({"error": "Serviço ou barbeiro indisponível."}), 404
 
-    hours = db.execute(
+    business_hours = db.execute(
         """
         SELECT is_open, open_time, close_time, break_start, break_end
         FROM business_hours
@@ -620,8 +634,18 @@ def public_availability(slug):
         """,
         (barbershop["id"], day.weekday())
     ).fetchone()
+    personal_hours = db.execute(
+        """
+        SELECT is_open, open_time, close_time, break_start, break_end
+        FROM staff_hours
+        WHERE barbershop_id = ? AND user_id = ? AND weekday = ?
+        """,
+        (barbershop["id"], barber_id, day.weekday())
+    ).fetchone()
+    hours = personal_hours if personal_hours is not None else business_hours
 
-    if hours is None or not hours["is_open"]:
+    if (business_hours is None or not business_hours["is_open"]
+            or hours is None or not hours["is_open"]):
         return jsonify({"date": day.isoformat(), "slots": []}), 200
 
     opening = datetime.combine(
@@ -688,6 +712,37 @@ def public_availability(slug):
             and candidate < break_end
             and candidate_end > break_start
         )
+        if personal_hours is not None:
+            personal_break_start = (
+                datetime.combine(day, datetime.strptime(personal_hours["break_start"], "%H:%M").time())
+                if personal_hours["break_start"] else None
+            )
+            personal_break_end = (
+                datetime.combine(day, datetime.strptime(personal_hours["break_end"], "%H:%M").time())
+                if personal_hours["break_end"] else None
+            )
+            overlaps_break = overlaps_break or (
+                personal_break_start is not None
+                and candidate < personal_break_end
+                and candidate_end > personal_break_start
+            )
+        # O horário individual não amplia o expediente geral da barbearia.
+        business_open = datetime.combine(day, datetime.strptime(business_hours["open_time"], "%H:%M").time())
+        business_close = datetime.combine(day, datetime.strptime(business_hours["close_time"], "%H:%M").time())
+        if candidate < business_open or candidate_end > business_close:
+            candidate += timedelta(minutes=15)
+            continue
+        business_break_start = (
+            datetime.combine(day, datetime.strptime(business_hours["break_start"], "%H:%M").time())
+            if business_hours["break_start"] else None
+        )
+        business_break_end = (
+            datetime.combine(day, datetime.strptime(business_hours["break_end"], "%H:%M").time())
+            if business_hours["break_end"] else None
+        )
+        if business_break_start and candidate < business_break_end and candidate_end > business_break_start:
+            candidate += timedelta(minutes=15)
+            continue
         overlaps_busy = any(
             candidate < busy_end and candidate_end > busy_start
             for busy_start, busy_end in occupied
