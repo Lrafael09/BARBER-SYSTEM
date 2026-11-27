@@ -1,4 +1,4 @@
-import { handlePublicApi } from "./public.js";
+import { handlePublicApi, saoPauloDateTime } from "./public.js";
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
   status,
@@ -174,7 +174,7 @@ async function updateLunchBreaks(request, env, session) {
   if (!data || !Array.isArray(data.days) || data.days.length !== 7) {
     return json({ error: "Envie a pausa dos sete dias da semana." }, 400);
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = saoPauloDateTime().date;
   const seen = new Set();
   const writes = [];
   for (const item of data.days) {
@@ -231,7 +231,7 @@ async function updateLunchBreaks(request, env, session) {
 
 async function barberCommissions(env, session, url) {
   const period = url.searchParams.get("period") || "weekly";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = saoPauloDateTime().date;
   let start, end;
   if (period === "daily") start = end = today;
   else if (period === "weekly") { start = mondayOf(today); end = addDays(start, 6); }
