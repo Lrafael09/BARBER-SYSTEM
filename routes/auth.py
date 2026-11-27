@@ -3,19 +3,20 @@ BARBER-SYSTEM
 Autenticação e criação inicial de contas.
 
 Nesta etapa:
-- Mantém as funções de hash de senha.
-- Permite cadastrar uma nova barbearia e seu proprietário.
-- Cria os dois registros em uma única transação.
+- Cadastro da barbearia e do proprietário.
+- Login do proprietário por e-mail e senha.
+- Sessão para manter o proprietário autenticado.
+- Logout e verificação da sessão atual.
 
-O login, logout, sessões e cadastro de colaboradores serão
-implementados em etapas próprias, com suas respectivas proteções.
+O acesso dos colaboradores por PIN será implementado separadamente.
 """
 
 import re
 import sqlite3
 import unicodedata
+from functools import wraps
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from database import get_db
@@ -49,6 +50,19 @@ def create_slug(name):
     without_accents = normalized.encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", without_accents.lower())
     return slug.strip("-")
+
+
+def owner_required(view):
+    """Impede que rotas administrativas sejam usadas sem login de proprietário."""
+
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if session.get("user_role") != "owner" or not session.get("user_id"):
+            return jsonify({"error": "Acesso não autorizado. Faça login."}), 401
+
+        return view(*args, **kwargs)
+
+    return wrapped_view
 
 
 @auth_bp.route("/auth/register", methods=["POST"])
@@ -97,8 +111,6 @@ def register_owner():
     db = get_db()
 
     try:
-        # Inicia uma transação de escrita para evitar duas criações
-        # simultâneas com o mesmo e-mail ou endereço.
         db.execute("BEGIN IMMEDIATE")
 
         existing_owner = db.execute(
@@ -171,3 +183,103 @@ def register_owner():
     except Exception:
         db.rollback()
         raise
+
+
+@auth_bp.route("/auth/login", methods=["POST"])
+def login_owner():
+    """Autentica o proprietário e inicia uma sessão."""
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie os dados em formato JSON."}), 400
+
+    email = str(data.get("email", "")).strip().lower()
+    password = data.get("password", "")
+
+    if not email or not isinstance(password, str) or not password:
+        return jsonify({"error": "Informe e-mail e senha."}), 400
+
+    user = get_db().execute(
+        """
+        SELECT
+            users.id,
+            users.barbershop_id,
+            users.name,
+            users.email,
+            users.password_hash,
+            users.role,
+            users.is_active,
+            barbershops.name AS barbershop_name,
+            barbershops.slug AS barbershop_slug
+        FROM users
+        INNER JOIN barbershops
+            ON barbershops.id = users.barbershop_id
+        WHERE users.email = ? AND users.role = 'owner'
+        """,
+        (email,)
+    ).fetchone()
+
+    if (
+        user is None
+        or not user["is_active"]
+        or not verify_password(user["password_hash"], password)
+    ):
+        return jsonify({"error": "E-mail ou senha incorretos."}), 401
+
+    # Limpa qualquer sessão anterior antes de criar a nova.
+    session.clear()
+    session["user_id"] = user["id"]
+    session["barbershop_id"] = user["barbershop_id"]
+    session["user_role"] = user["role"]
+
+    return jsonify({
+        "message": "Login realizado com sucesso.",
+        "user": {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"],
+            "role": user["role"]
+        },
+        "barbershop": {
+            "id": user["barbershop_id"],
+            "name": user["barbershop_name"],
+            "slug": user["barbershop_slug"]
+        }
+    }), 200
+
+
+@auth_bp.route("/auth/me", methods=["GET"])
+@owner_required
+def current_owner():
+    """Retorna os dados básicos da sessão autenticada."""
+
+    user = get_db().execute(
+        """
+        SELECT id, barbershop_id, name, email, role
+        FROM users
+        WHERE id = ? AND barbershop_id = ?
+          AND role = 'owner' AND is_active = 1
+        """,
+        (session["user_id"], session["barbershop_id"])
+    ).fetchone()
+
+    if user is None:
+        session.clear()
+        return jsonify({"error": "Sessão inválida. Faça login novamente."}), 401
+
+    return jsonify({
+        "id": user["id"],
+        "barbershop_id": user["barbershop_id"],
+        "name": user["name"],
+        "email": user["email"],
+        "role": user["role"]
+    }), 200
+
+
+@auth_bp.route("/auth/logout", methods=["POST"])
+def logout_owner():
+    """Encerra a sessão atual."""
+
+    session.clear()
+    return jsonify({"message": "Logout realizado com sucesso."}), 200
