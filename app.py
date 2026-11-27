@@ -22,17 +22,30 @@ from routes.admin import admin_bp
 from routes.barber import barber_bp
 
 
-def create_app():
+def create_app(test_config=None):
     """Cria e configura a aplicação Flask."""
 
     app = Flask(__name__)
 
-    # A chave secreta deve ser definida no ambiente em produção.
-    # O valor abaixo serve somente para desenvolvimento local.
-    app.config["SECRET_KEY"] = os.environ.get(
-        "SECRET_KEY",
-        "chave-local-apenas-para-desenvolvimento"
+    app.config.from_mapping(
+        SECRET_KEY=os.environ.get(
+            "SECRET_KEY",
+            "chave-local-apenas-para-desenvolvimento"
+        ),
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.environ.get("APP_ENV") == "production",
+        MAX_CONTENT_LENGTH=1024 * 1024
     )
+
+    if test_config:
+        app.config.update(test_config)
+
+    if os.environ.get("APP_ENV") == "production" and (
+        not os.environ.get("SECRET_KEY")
+        or app.config["SECRET_KEY"] == "chave-local-apenas-para-desenvolvimento"
+    ):
+        raise RuntimeError("Defina uma SECRET_KEY forte antes de iniciar em produção.")
 
     # Configura o caminho do SQLite e o fechamento das conexões.
     init_database(app)
@@ -78,8 +91,9 @@ app = create_app()
 
 if __name__ == "__main__":
     # Servidor local de desenvolvimento. Não usar debug em produção.
+    is_production = os.environ.get("APP_ENV") == "production"
     app.run(
-        host="127.0.0.1",
-        port=5000,
-        debug=True
+        host="0.0.0.0" if is_production else "127.0.0.1",
+        port=int(os.environ.get("PORT", "5000")),
+        debug=not is_production
     )
