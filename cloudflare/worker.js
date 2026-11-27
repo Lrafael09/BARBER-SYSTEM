@@ -168,9 +168,9 @@ export default {
         }
       } else if (url.pathname === "/admin/panel/index.html") {
         response = html(ADMIN_PAGE);
-      } else if (/^\\/barber\\/[a-z0-9-]+$/.test(url.pathname)) {
+      } else if (/^\/barber\/[a-z0-9-]+$/.test(url.pathname)) {
         response = html(BARBER_PAGE);
-      } else if (/^\\/b\\/[a-z0-9-]+\\/book$/.test(url.pathname)) {
+      } else if (/^\/b\/[a-z0-9-]+\/book$/.test(url.pathname)) {
         response = html(BOOKING_PAGE);
       } else {
         response = new Response("Página não encontrada.", { status: 404 });
