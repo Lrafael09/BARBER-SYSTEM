@@ -1,3 +1,5 @@
+import { hashPassword } from "./passwords.js";
+
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
   headers: { "content-type": "application/json; charset=utf-8" }
@@ -778,6 +780,44 @@ export async function handleAdminApi(request, env, url) {
     return json({ error: "Acesso não autorizado. Faça login como proprietário." }, 401);
   }
   const shopId = session.barbershop_id;
+
+  if (url.pathname === "/api/admin/dashboard" && request.method === "GET") return adminDashboard(env, shopId);
+  if (url.pathname === "/api/admin/customers" && request.method === "GET") return listAdminCustomers(env, shopId);
+  if (url.pathname === "/api/admin/barbershop" && request.method === "GET") return getBarbershopSettings(env, shopId);
+  if (url.pathname === "/api/admin/barbershop/settings" && request.method === "POST") return saveBarbershopSettings(request, env, shopId);
+  if (url.pathname === "/api/admin/barbershop/logo" && request.method === "POST") return saveBarbershopLogo(request, env, shopId);
+
+  if (url.pathname === "/api/admin/schedule" && request.method === "GET") return getBusinessSchedule(env, shopId);
+  if (url.pathname === "/api/admin/schedule" && request.method === "PUT") return saveBusinessSchedule(request, env, shopId);
+  if (url.pathname === "/api/admin/blocks" && request.method === "GET") return listTimeBlocks(env, shopId);
+  if (url.pathname === "/api/admin/blocks" && request.method === "POST") return createTimeBlock(request, env, session);
+
+  const block = url.pathname.match(/^\/api\/admin\/blocks\/(\d+)$/);
+  if (block && request.method === "DELETE") return deleteTimeBlock(env, shopId, Number(block[1]));
+
+  if (url.pathname === "/api/admin/services" && request.method === "GET") return listAdminServices(env, shopId);
+  if (url.pathname === "/api/admin/services" && request.method === "POST") return saveService(request, env, shopId);
+  const service = url.pathname.match(/^\/api\/admin\/services\/(\d+)$/);
+  if (service && request.method === "PATCH") return saveService(request, env, shopId, Number(service[1]));
+  if (service && request.method === "DELETE") return deactivateService(env, shopId, Number(service[1]));
+
+  if (url.pathname === "/api/admin/barbers" && request.method === "GET") return listAdminBarbers(env, shopId);
+  if (url.pathname === "/api/admin/barbers" && request.method === "POST") return createAdminBarber(request, env, shopId);
+  const barber = url.pathname.match(/^\/api\/admin\/barbers\/(\d+)$/);
+  if (barber && request.method === "PATCH") return updateAdminBarber(request, env, shopId, Number(barber[1]));
+  if (barber && request.method === "DELETE") return deactivateAdminBarber(env, shopId, Number(barber[1]));
+  if (url.pathname === "/api/admin/staff/owner" && request.method === "PATCH") return updateOwnerProvider(request, env, session);
+
+  const staffSchedule = url.pathname.match(/^\/api\/admin\/staff\/(\d+)\/schedule$/);
+  if (staffSchedule && request.method === "GET") return getStaffSchedule(env, shopId, Number(staffSchedule[1]));
+  if (staffSchedule && request.method === "PUT") return saveStaffSchedule(request, env, shopId, Number(staffSchedule[1]));
+  if (staffSchedule && request.method === "DELETE") return resetStaffSchedule(env, shopId, Number(staffSchedule[1]));
+
+  if (url.pathname === "/api/admin/products" && request.method === "GET") return listProducts(env, shopId);
+  if (url.pathname === "/api/admin/products" && request.method === "POST") return saveProduct(request, env, shopId);
+  const product = url.pathname.match(/^\/api\/admin\/products\/(\d+)$/);
+  if (product && request.method === "PATCH") return saveProduct(request, env, shopId, Number(product[1]));
+  if (product && request.method === "DELETE") return deactivateProduct(env, shopId, Number(product[1]));
 
   if (url.pathname === "/api/admin/appointments" && request.method === "GET") return listAdminAppointments(env, shopId, url);
 
