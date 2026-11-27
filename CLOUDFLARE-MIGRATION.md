@@ -7,6 +7,7 @@ This branch is the isolated Cloudflare migration. The original Flask application
 - Worker entrypoint is `cloudflare/worker.js`.
 - Authentication and legacy password verification are in `cloudflare/passwords.js`.
 - Public customer and booking APIs are in `cloudflare/public.js`.
+- Professional agenda, commissions and service completion are in `cloudflare/barber.js`.
 - D1 binding is configured in `wrangler.toml`.
 - Static assets will be served from `public/`.
 
@@ -32,6 +33,22 @@ All routes below use the barbershop slug:
 The public booking API checks active services and professionals, shop and individual opening hours, breaks, time blocks and existing appointments. A D1 trigger in `cloudflare/public-booking.sql` prevents overlapping appointments and time-block conflicts even if two booking requests arrive at nearly the same time.
 
 The four last phone digits only locate possible customer records; they do not prove customer identity. Public cancellation checks the complete phone number, matching the behavior of the existing Flask app.
+
+## Professional agenda migration
+Authenticated professional endpoints:
+- `GET /api/barber/me`
+- `GET /api/barber/appointments` with optional `date`, `from`, `to` and `status`
+- `POST /api/barber/appointments` for creating an appointment in the logged-in professional's own agenda
+- `GET /api/barber/availability`
+- `POST /api/barber/appointments/:id/complete` to close a service and register its revenue
+- `POST /api/barber/appointments/:id/cancel`
+- `PATCH /api/barber/appointments/:id/status`
+- `GET /api/barber/customers` and `GET /api/barber/services`
+- `GET /api/barber/schedule` and `PUT /api/barber/schedule` for individual lunch breaks
+- `GET /api/barber/commissions` with daily, weekly, monthly and yearly periods
+- `GET /api/barber/shops/:slug/staff` for the public professional selector before PIN login
+
+Closing a service updates the appointment, calculates the professional's commission in cents and creates the corresponding finance entry in one D1 batch. Reopening or cancelling a completed appointment removes its linked finance entry.
 
 This phase is backend-only. The existing Flask HTML pages still call Flask endpoints and must be connected to the Cloudflare API in the later interface phase.
 
