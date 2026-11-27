@@ -1,4 +1,6 @@
-import { scrypt } from "scrypt-js";
+import scryptJs from "scrypt-js";
+
+const { scrypt } = scryptJs;
 
 const encoder = new TextEncoder();
 const CURRENT_ITERATIONS = 310000;
