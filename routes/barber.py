@@ -324,6 +324,13 @@ def _staff_hours_for_day(db, barbershop_id, user_id, weekday):
     ).fetchone()
     return business, personal, personal if personal is not None else business
 
+def _staff_break_for_day(db, barbershop_id, user_id, weekday):
+    return db.execute(
+        """SELECT break_start, break_end FROM staff_breaks
+           WHERE barbershop_id = ? AND user_id = ? AND weekday = ?""",
+        (barbershop_id, user_id, weekday)
+    ).fetchone()
+
 
 @barber_bp.route("/services", methods=["GET"])
 @barber_required
@@ -388,8 +395,11 @@ def barber_availability():
         for row in list(blocks) + list(appointments)
     ]
 
+    staff_break = _staff_break_for_day(
+        db, session["barbershop_id"], session["user_id"], selected_day.weekday()
+    )
     breaks = []
-    for schedule in (business, personal):
+    for schedule in (business, personal, staff_break):
         if schedule is not None and schedule["break_start"] and schedule["break_end"]:
             breaks.append((
                 datetime.combine(selected_day, datetime.strptime(schedule["break_start"], "%H:%M").time()),
@@ -474,7 +484,8 @@ def create_barber_appointment():
             db.rollback()
             return jsonify({"error": "Esse horário está fora do expediente."}), 409
 
-        for schedule in (business, personal):
+        staff_break = _staff_break_for_day(db, shop_id, user_id, starts.weekday())
+        for schedule in (business, personal, staff_break):
             if (schedule is not None and schedule["break_start"] and schedule["break_end"]
                     and start_clock < schedule["break_end"] and end_clock > schedule["break_start"]):
                 db.rollback()
@@ -549,7 +560,7 @@ def create_barber_appointment():
 @barber_bp.route("/schedule", methods=["GET"])
 @barber_required
 def get_barber_schedule():
-    """Retorna o expediente efetivo e a pausa configurada pelo profissional."""
+    """Retorna expediente efetivo e intervalo individual do profissional."""
     db = get_db()
     business_rows = db.execute(
         """SELECT weekday, is_open, open_time, close_time, break_start, break_end
@@ -561,8 +572,14 @@ def get_barber_schedule():
            FROM staff_hours WHERE barbershop_id = ? AND user_id = ? ORDER BY weekday""",
         (session["barbershop_id"], session["user_id"])
     ).fetchall()
+    break_rows = db.execute(
+        """SELECT weekday, break_start, break_end FROM staff_breaks
+           WHERE barbershop_id = ? AND user_id = ? ORDER BY weekday""",
+        (session["barbershop_id"], session["user_id"])
+    ).fetchall()
     business = {row["weekday"]: dict(row) for row in business_rows}
     personal = {row["weekday"]: dict(row) for row in personal_rows}
+    individual_breaks = {row["weekday"]: dict(row) for row in break_rows}
     days = []
     for weekday in range(7):
         base = business.get(weekday, {
@@ -570,15 +587,23 @@ def get_barber_schedule():
             "close_time": None, "break_start": None, "break_end": None
         })
         own = personal.get(weekday)
+        own_break = individual_breaks.get(weekday)
         effective = own if own is not None else base
+        if own_break is not None:
+            break_start, break_end = own_break["break_start"], own_break["break_end"]
+        elif own is not None and own["break_start"]:
+            break_start, break_end = own["break_start"], own["break_end"]
+        else:
+            break_start, break_end = base["break_start"], base["break_end"]
         days.append({
             "weekday": weekday,
             "is_open": bool(effective["is_open"]),
             "open_time": effective["open_time"],
             "close_time": effective["close_time"],
-            "break_start": (own["break_start"] if own and own["break_start"] else base["break_start"]),
-            "break_end": (own["break_end"] if own and own["break_end"] else base["break_end"]),
+            "break_start": break_start,
+            "break_end": break_end,
             "has_personal_schedule": own is not None,
+            "has_individual_break": own_break is not None,
             "business_break_start": base["break_start"],
             "business_break_end": base["break_end"]
         })
@@ -588,7 +613,7 @@ def get_barber_schedule():
 @barber_bp.route("/schedule", methods=["PUT"])
 @barber_required
 def update_barber_lunch_breaks():
-    """Permite ao profissional configurar sua pausa semanal sem alterar o expediente-base."""
+    """Permite ao profissional configurar seu almoço sem alterar o expediente-base."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not isinstance(data.get("days"), list) or len(data["days"]) != 7:
         return jsonify({"error": "Envie a pausa dos sete dias da semana."}), 400
@@ -606,23 +631,21 @@ def update_barber_lunch_breaks():
             seen.add(weekday)
 
             business, own, effective = _staff_hours_for_day(db, shop_id, user_id, weekday)
-            if business is None or not business["is_open"] or effective is None or not effective["is_open"]:
-                if item.get("break_start") or item.get("break_end"):
-                    raise ValueError("Não é possível definir almoço em um dia sem expediente.")
-                normalized.append((weekday, effective, None, None))
-                continue
-
             start = item.get("break_start") or None
             end = item.get("break_end") or None
             if (start is None) != (end is None):
                 raise ValueError("Informe início e fim do almoço, ou deixe os dois vazios.")
+
             if start is not None:
+                if business is None or not business["is_open"] or effective is None or not effective["is_open"]:
+                    raise ValueError("Não é possível definir almoço em um dia sem expediente.")
                 start = _clock_value(start, "Início do almoço")
                 end = _clock_value(end, "Fim do almoço")
                 opening, closing = effective["open_time"], effective["close_time"]
                 if not opening < start < end < closing:
                     raise ValueError("O almoço precisa ficar dentro do seu expediente.")
-                # Não permite criar pausa recorrente sobre atendimentos já reservados.
+
+                # Não permite criar pausa recorrente sobre atendimentos futuros.
                 bookings = db.execute(
                     """SELECT starts_at, ends_at FROM appointments
                        WHERE barbershop_id = ? AND barber_id = ? AND status = 'scheduled'
@@ -635,24 +658,27 @@ def update_barber_lunch_breaks():
                     if booking_start.weekday() == weekday:
                         if booking_start.strftime("%H:%M") < end and booking_end.strftime("%H:%M") > start:
                             raise ValueError("Já existe um agendamento futuro nesse horário de almoço. Ajuste ou remarque primeiro.")
-            normalized.append((weekday, effective, start, end))
+
+            normalized.append((weekday, start, end))
     except (ValueError, TypeError, AttributeError) as error:
         return jsonify({"error": str(error)}), 400
 
-    for weekday, effective, start, end in normalized:
-        if effective is None:
-            continue
-        db.execute(
-            """INSERT INTO staff_hours (
-                   barbershop_id, user_id, weekday, is_open, open_time, close_time,
-                   break_start, break_end
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(barbershop_id, user_id, weekday) DO UPDATE SET
-                   break_start = excluded.break_start,
-                   break_end = excluded.break_end""",
-            (shop_id, user_id, weekday, int(bool(effective["is_open"])),
-             effective["open_time"], effective["close_time"], start, end)
-        )
+    for weekday, start, end in normalized:
+        if start is None:
+            db.execute(
+                "DELETE FROM staff_breaks WHERE barbershop_id = ? AND user_id = ? AND weekday = ?",
+                (shop_id, user_id, weekday)
+            )
+        else:
+            db.execute(
+                """INSERT INTO staff_breaks (
+                       barbershop_id, user_id, weekday, break_start, break_end
+                   ) VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(barbershop_id, user_id, weekday) DO UPDATE SET
+                       break_start = excluded.break_start,
+                       break_end = excluded.break_end""",
+                (shop_id, user_id, weekday, start, end)
+            )
     db.commit()
     return jsonify({"message": "Horários de almoço atualizados."}), 200
 
