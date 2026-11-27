@@ -56,45 +56,48 @@ async function api(request, env, url) {
 
 
   if(url.pathname==="/api/auth/registration-status"&&request.method==="GET"){
-   const shops=await env.DB.prepare("SELECT COUNT(*) AS n FROM barbershops").first();
-   const users=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
-   const available=env.OWNER_REGISTRATION_ENABLED==="true"&&users.n===0&&shops.n<=1;
-   return json({available,recovery:available&&shops.n===1});
+   return json({available:env.OWNER_REGISTRATION_ENABLED==="true"});
   }
   if(url.pathname==="/api/auth/register"&&request.method==="POST"){
    const d=await request.json().catch(()=>null); if(!d)return json({error:"Envie os dados em JSON."},400);
    const shop=String(d.shop_name||"").trim(),name=String(d.owner_name||"").trim(),email=String(d.email||"").trim().toLowerCase(),pass=d.password,wa=String(d.whatsapp||"").replace(/\\D/g,"");
-   if(!shop||!name||!email||!pass)return json({error:"Preencha todos os campos."},400);
-   if(shop.length>120||name.length>120||!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))return json({error:"Confira os dados informados."},400);
+   if(!shop||!name||!email||!pass||!wa)return json({error:"Preencha todos os campos, inclusive o WhatsApp."},400);
+   if(shop.length>120||name.length>120||!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)||wa.length<10||wa.length>13)return json({error:"Confira o nome, e-mail e WhatsApp informado."},400);
    if(typeof pass!=="string"||pass.length<8)return json({error:"A senha deve ter pelo menos 8 caracteres."},400);
-   if(env.OWNER_REGISTRATION_ENABLED!=="true")return json({error:"Cadastro inicial desativado."},403);
-   const shops=await env.DB.prepare("SELECT COUNT(*) AS n FROM barbershops").first();
-   const users=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
-   if(users.n||shops.n>1)return json({error:"Já existe uma conta cadastrada. Faça login."},409);
-   let barbershopId,barbershopName,barbershopSlug,createdNewShop=false;
-   if(shops.n===1){
-    const existing=await env.DB.prepare("SELECT id,name,slug FROM barbershops ORDER BY id LIMIT 1").first();
-    if(!existing)return json({error:"Não foi possível recuperar a barbearia. Entre em contato com o suporte."},500);
-    barbershopId=existing.id;barbershopName=existing.name;barbershopSlug=existing.slug;
+   if(env.OWNER_REGISTRATION_ENABLED!=="true")return json({error:"Novos cadastros estão temporariamente desativados."},403);
+   const emailUsed=await env.DB.prepare("SELECT id FROM users WHERE lower(email)=? AND role='owner' LIMIT 1").bind(email).first();
+   if(emailUsed)return json({error:"Este e-mail já possui uma conta. Use outro e-mail ou entre no painel."},409);
+   const phoneUsed=await env.DB.prepare("SELECT id FROM barbershops WHERE whatsapp=? LIMIT 1").bind(wa).first();
+   if(phoneUsed)return json({error:"Este WhatsApp já está vinculado a uma barbearia. Use outro número."},409);
+   const base=shop.normalize("NFKD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+   if(!base)return json({error:"Nome inválido para endereço."},400);
+   let slug=base,i=2;
+   while(await env.DB.prepare("SELECT id FROM barbershops WHERE slug=?").bind(slug).first())slug=base+"-"+i++;
+   const shopCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM barbershops").first();
+   const userCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
+   let barbershopId,createdNewShop=false;
+   if(shopCount.n===1&&userCount.n===0){
+    const legacy=await env.DB.prepare("SELECT id FROM barbershops ORDER BY id LIMIT 1").first();
+    barbershopId=legacy.id;
    }else{
-    const base=shop.normalize("NFKD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
-    if(!base)return json({error:"Nome inválido para endereço."},400);
-    let slug=base,i=2;while(await env.DB.prepare("SELECT id FROM barbershops WHERE slug=?").bind(slug).first())slug=base+"-"+i++;
-    const created=await env.DB.prepare("INSERT INTO barbershops(name,slug,whatsapp) VALUES(?,?,?)").bind(shop,slug,wa||null).run();
-    barbershopId=created.meta.last_row_id;barbershopName=shop;barbershopSlug=slug;createdNewShop=true;
+    const created=await env.DB.prepare("INSERT INTO barbershops(name,slug,whatsapp) VALUES(?,?,?)").bind(shop,slug,wa).run();
+    barbershopId=created.meta.last_row_id;createdNewShop=true;
    }
    try{
     const passwordHash=await hashPassword(pass);
-    const inserted=await env.DB.prepare("INSERT INTO users(barbershop_id,name,email,password_hash,role,can_serve) SELECT ?,?,?,?,'owner',0 WHERE NOT EXISTS (SELECT 1 FROM users WHERE barbershop_id=? AND role='owner')").bind(barbershopId,name,email,passwordHash,barbershopId).run();
-    if(!inserted.meta.changes)return json({error:"A conta do proprietário já foi criada. Faça login."},409);
+    await env.DB.prepare("INSERT INTO users(barbershop_id,name,email,password_hash,role,can_serve) VALUES(?,?,?,?,'owner',0)").bind(barbershopId,name,email,passwordHash).run();
+    if(!createdNewShop){
+     await env.DB.prepare("UPDATE barbershops SET name=?,slug=?,whatsapp=? WHERE id=?").bind(shop,slug,wa,barbershopId).run();
+    }
    }catch(error){
     if(createdNewShop)await env.DB.prepare("DELETE FROM barbershops WHERE id=? AND NOT EXISTS (SELECT 1 FROM users WHERE barbershop_id=?)").bind(barbershopId,barbershopId).run();
+    if(String(error?.message||"").toLowerCase().includes("unique"))return json({error:"Este e-mail ou WhatsApp já está em uso, ou esta barbearia já possui proprietário. Confira os dados e tente novamente."},409);
     throw error;
    }
-   return json({message:"Cadastro concluído. Agora entre com seu e-mail e senha.",barbershop:{id:barbershopId,name:barbershopName,slug:barbershopSlug}},201);
+   return json({message:"Barbearia cadastrada com sucesso. Agora entre com seu e-mail e senha.",barbershop:{id:barbershopId,name:shop,slug}},201);
   }
 
-  if(url.pathname==="/api/auth/login"&&request.method==="POST"){
+if(url.pathname==="/api/auth/login"&&request.method==="POST"){
    const d=await request.json().catch(()=>null);if(!d)return json({error:"Informe e-mail e senha."},400);
    const email=String(d.email||"").trim().toLowerCase();
    const u=await env.DB.prepare("SELECT u.id,u.barbershop_id,u.name,u.email,u.password_hash,u.role,u.is_active,b.name AS shop_name,b.slug AS shop_slug FROM users u JOIN barbershops b ON b.id=u.barbershop_id WHERE u.email=? AND u.role='owner'").bind(email).first();
