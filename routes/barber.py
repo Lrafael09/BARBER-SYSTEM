@@ -332,6 +332,23 @@ def _staff_break_for_day(db, barbershop_id, user_id, weekday):
     ).fetchone()
 
 
+
+@barber_bp.route("/customers", methods=["GET"])
+@barber_required
+def barber_customers():
+    """Lista apenas nomes de clientes já cadastrados pelo administrador."""
+    rows = get_db().execute(
+        """SELECT id, name FROM customers
+           WHERE barbershop_id = ?
+           ORDER BY name COLLATE NOCASE
+           LIMIT 1000""",
+        (session["barbershop_id"],)
+    ).fetchall()
+    return jsonify({
+        "customers": [{"id": row["id"], "name": row["name"]} for row in rows]
+    }), 200
+
+
 @barber_bp.route("/services", methods=["GET"])
 @barber_required
 def barber_services():
@@ -432,15 +449,12 @@ def create_barber_appointment():
     if not isinstance(data, dict):
         return jsonify({"error": "Informe os dados do agendamento."}), 400
 
-    name = str(data.get("customer_name", "")).strip()
-    phone = _phone_digits(data.get("customer_phone", ""))
-    if not name or len(name) > 120:
-        return jsonify({"error": "Informe o nome do cliente."}), 400
-    if not 10 <= len(phone) <= 13:
-        return jsonify({"error": "Informe um telefone válido com DDD."}), 400
-
     try:
+        customer_id = int(data.get("customer_id"))
         service_id = int(data.get("service_id"))
+        if customer_id <= 0:
+            raise ValueError
+
         starts_value = data.get("starts_at")
         if not isinstance(starts_value, str):
             raise ValueError
@@ -466,9 +480,17 @@ def create_barber_appointment():
                WHERE id = ? AND barbershop_id = ? AND is_active = 1""",
             (user_id, shop_id)
         ).fetchone()
+        customer = db.execute(
+            """SELECT id, name FROM customers
+               WHERE id = ? AND barbershop_id = ?""",
+            (customer_id, shop_id)
+        ).fetchone()
         if service is None or professional is None:
             db.rollback()
             return jsonify({"error": "Serviço ou profissional indisponível."}), 404
+        if customer is None:
+            db.rollback()
+            return jsonify({"error": "Cliente não encontrado. Peça ao administrador para cadastrá-lo."}), 404
 
         ends = starts + timedelta(minutes=service["duration_minutes"])
         if ends.date() != starts.date():
@@ -513,20 +535,6 @@ def create_barber_appointment():
             db.rollback()
             return jsonify({"error": "Esse horário acabou de ser ocupado. Escolha outro."}), 409
 
-        customer = db.execute(
-            "SELECT id FROM customers WHERE barbershop_id = ? AND phone = ?",
-            (shop_id, phone)
-        ).fetchone()
-        if customer is None:
-            cursor = db.execute(
-                """INSERT INTO customers (barbershop_id, name, phone, phone_last4)
-                   VALUES (?, ?, ?, ?)""",
-                (shop_id, name, phone, phone[-4:])
-            )
-            customer_id = cursor.lastrowid
-        else:
-            customer_id = customer["id"]
-
         cursor = db.execute(
             """INSERT INTO appointments (
                    barbershop_id, customer_id, service_id, barber_id,
@@ -546,7 +554,7 @@ def create_barber_appointment():
         "message": "Agendamento criado com sucesso.",
         "appointment": {
             "id": cursor.lastrowid,
-            "customer_name": name if customer is None else None,
+            "customer_name": customer["name"],
             "service_name": service["name"],
             "price_cents": service["price_cents"],
             "duration_minutes": service["duration_minutes"],
