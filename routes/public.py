@@ -9,7 +9,7 @@ a identidade do cliente.
 
 import re
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, render_template
 
 from database import get_db
 
@@ -518,3 +518,182 @@ def cancel_public_appointment(slug, appointment_id):
         return jsonify({"error": "Esse agendamento já foi alterado."}), 409
 
     return jsonify({"message": "Agendamento cancelado com sucesso."}), 200
+
+
+
+@public_bp.route("/b/<slug>/book", methods=["GET"])
+def public_booking_page(slug):
+    """Entrega a interface pública de agendamento da barbearia."""
+
+    barbershop = find_barbershop(slug)
+    if barbershop is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+
+    return render_template(
+        "booking.html",
+        barbershop_name=barbershop["name"],
+        barbershop_slug=barbershop["slug"]
+    )
+
+
+@public_bp.route("/b/<slug>/catalog", methods=["GET"])
+def public_booking_catalog(slug):
+    """Lista serviços e barbeiros ativos disponíveis para o cliente."""
+
+    barbershop = find_barbershop(slug)
+    if barbershop is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+
+    db = get_db()
+    services = db.execute(
+        """
+        SELECT id, name, description, price_cents, duration_minutes
+        FROM services
+        WHERE barbershop_id = ? AND is_active = 1
+        ORDER BY name COLLATE NOCASE
+        """,
+        (barbershop["id"],)
+    ).fetchall()
+
+    barbers = db.execute(
+        """
+        SELECT id, name
+        FROM users
+        WHERE barbershop_id = ? AND role = 'barber' AND is_active = 1
+        ORDER BY name COLLATE NOCASE
+        """,
+        (barbershop["id"],)
+    ).fetchall()
+
+    return jsonify({
+        "services": [dict(row) for row in services],
+        "barbers": [dict(row) for row in barbers],
+        "whatsapp": barbershop["whatsapp"]
+    }), 200
+
+
+@public_bp.route("/b/<slug>/availability", methods=["GET"])
+def public_availability(slug):
+    """Calcula horários livres de um barbeiro para um serviço e uma data."""
+
+    from datetime import datetime, timedelta
+
+    barbershop = find_barbershop(slug)
+    if barbershop is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+
+    try:
+        service_id = int(request.args.get("service_id", ""))
+        barber_id = int(request.args.get("barber_id", ""))
+        day = datetime.strptime(request.args.get("date", ""), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "Informe service_id, barber_id e date (AAAA-MM-DD)."
+        }), 400
+
+    db = get_db()
+    service = db.execute(
+        """
+        SELECT duration_minutes FROM services
+        WHERE id = ? AND barbershop_id = ? AND is_active = 1
+        """,
+        (service_id, barbershop["id"])
+    ).fetchone()
+    barber = db.execute(
+        """
+        SELECT id FROM users
+        WHERE id = ? AND barbershop_id = ? AND role = 'barber' AND is_active = 1
+        """,
+        (barber_id, barbershop["id"])
+    ).fetchone()
+
+    if service is None or barber is None:
+        return jsonify({"error": "Serviço ou barbeiro indisponível."}), 404
+
+    hours = db.execute(
+        """
+        SELECT is_open, open_time, close_time, break_start, break_end
+        FROM business_hours
+        WHERE barbershop_id = ? AND weekday = ?
+        """,
+        (barbershop["id"], day.weekday())
+    ).fetchone()
+
+    if hours is None or not hours["is_open"]:
+        return jsonify({"date": day.isoformat(), "slots": []}), 200
+
+    opening = datetime.combine(
+        day, datetime.strptime(hours["open_time"], "%H:%M").time()
+    )
+    closing = datetime.combine(
+        day, datetime.strptime(hours["close_time"], "%H:%M").time()
+    )
+    duration = timedelta(minutes=service["duration_minutes"])
+
+    blocks = db.execute(
+        """
+        SELECT starts_at, ends_at
+        FROM time_blocks
+        WHERE barbershop_id = ?
+          AND (barber_id IS NULL OR barber_id = ?)
+          AND starts_at < ?
+          AND ends_at > ?
+        """,
+        (
+            barbershop["id"], barber_id,
+            f"{day.isoformat()}T23:59:59",
+            f"{day.isoformat()}T00:00:00"
+        )
+    ).fetchall()
+
+    appointments = db.execute(
+        """
+        SELECT starts_at, ends_at
+        FROM appointments
+        WHERE barbershop_id = ?
+          AND barber_id = ?
+          AND status = 'scheduled'
+          AND starts_at < ?
+          AND ends_at > ?
+        """,
+        (
+            barbershop["id"], barber_id,
+            f"{day.isoformat()}T23:59:59",
+            f"{day.isoformat()}T00:00:00"
+        )
+    ).fetchall()
+
+    occupied = [
+        (datetime.fromisoformat(row["starts_at"]), datetime.fromisoformat(row["ends_at"]))
+        for row in list(blocks) + list(appointments)
+    ]
+
+    break_start = (
+        datetime.combine(day, datetime.strptime(hours["break_start"], "%H:%M").time())
+        if hours["break_start"] else None
+    )
+    break_end = (
+        datetime.combine(day, datetime.strptime(hours["break_end"], "%H:%M").time())
+        if hours["break_end"] else None
+    )
+
+    slots = []
+    candidate = opening
+    while candidate + duration <= closing:
+        candidate_end = candidate + duration
+        overlaps_break = (
+            break_start is not None
+            and candidate < break_end
+            and candidate_end > break_start
+        )
+        overlaps_busy = any(
+            candidate < busy_end and candidate_end > busy_start
+            for busy_start, busy_end in occupied
+        )
+
+        if not overlaps_break and not overlaps_busy:
+            slots.append(candidate.strftime("%H:%M"))
+
+        candidate += timedelta(minutes=15)
+
+    return jsonify({"date": day.isoformat(), "slots": slots}), 200
