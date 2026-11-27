@@ -839,6 +839,7 @@ def list_appointments():
                 "id": row["id"],
                 "customer_name": row["customer_name"],
                 "barber_name": row["barber_name"],
+                "barber_id": row["barber_id"],
                 "service_name": row["service_name"],
                 "price_cents": row["price_cents"],
                 "duration_minutes": row["duration_minutes"],
@@ -1184,6 +1185,26 @@ def save_staff_schedule(user_id):
         )
     db.commit()
     return jsonify({"message": "Horários individuais salvos."}), 200
+
+
+
+@admin_bp.route("/staff/<int:user_id>/schedule", methods=["DELETE"])
+@active_owner_required
+def reset_staff_schedule(user_id):
+    """Remove o expediente individual e volta a herdar o expediente da barbearia."""
+    staff = _staff_record(user_id, session["barbershop_id"])
+    if staff is None:
+        return jsonify({"error": "Profissional não encontrado."}), 404
+
+    db = get_db()
+    db.execute(
+        "DELETE FROM staff_hours WHERE barbershop_id = ? AND user_id = ?",
+        (session["barbershop_id"], user_id)
+    )
+    db.commit()
+    return jsonify({
+        "message": "Expediente individual removido. O profissional voltou a usar o horário da barbearia."
+    }), 200
 
 
 @admin_bp.route("/products", methods=["GET"])
