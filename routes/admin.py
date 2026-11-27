@@ -1639,6 +1639,59 @@ def save_financial_goals():
     return jsonify({"message": "Metas financeiras atualizadas."}), 200
 
 
+
+
+@admin_bp.route("/appointments/<int:appointment_id>/barber", methods=["PATCH"])
+@active_owner_required
+def update_appointment_barber(appointment_id):
+    """Permite ao proprietário trocar o profissional de um agendamento ativo."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Informe o profissional do agendamento."}), 400
+    raw_barber_id = data.get("barber_id")
+    barber_id = None
+    commission_percent = None
+    if raw_barber_id not in (None, ""):
+        try:
+            barber_id = int(raw_barber_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Selecione um profissional válido."}), 400
+        staff = get_db().execute(
+            """SELECT id, role, can_serve, commission_percent FROM users
+               WHERE id = ? AND barbershop_id = ? AND is_active = 1
+                 AND (role = 'barber' OR (role = 'owner' AND can_serve = 1))""",
+            (barber_id, session["barbershop_id"])
+        ).fetchone()
+        if staff is None:
+            return jsonify({"error": "Esse profissional não está disponível para atendimento."}), 400
+        commission_percent = staff["commission_percent"] or 0
+    db = get_db()
+    appointment = db.execute(
+        """SELECT id, starts_at, ends_at, status FROM appointments
+           WHERE id = ? AND barbershop_id = ?""",
+        (appointment_id, session["barbershop_id"])
+    ).fetchone()
+    if appointment is None:
+        return jsonify({"error": "Agendamento não encontrado."}), 404
+    if appointment["status"] != "scheduled":
+        return jsonify({"error": "Só é possível editar o barbeiro de um agendamento ativo."}), 409
+    if barber_id is not None:
+        conflict = db.execute(
+            """SELECT id FROM appointments WHERE barbershop_id = ? AND barber_id = ?
+               AND id <> ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? LIMIT 1""",
+            (session["barbershop_id"], barber_id, appointment_id, appointment["ends_at"], appointment["starts_at"])
+        ).fetchone()
+        if conflict:
+            return jsonify({"error": "Esse profissional já possui outro atendimento nesse horário."}), 409
+    db.execute(
+        """UPDATE appointments SET barber_id = ?, commission_percent = ?, commission_cents = 0
+           WHERE id = ? AND barbershop_id = ? AND status = 'scheduled'""",
+        (barber_id, commission_percent, appointment_id, session["barbershop_id"])
+    )
+    db.commit()
+    return jsonify({"message": "Profissional do agendamento atualizado."}), 200
+
+
 @admin_bp.route("/appointments/<int:appointment_id>/complete", methods=["POST"])
 @active_owner_required
 def complete_appointment_admin(appointment_id):
