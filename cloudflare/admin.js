@@ -250,6 +250,97 @@ async function saveFinancialGoals(request, env, shopId) {
   return json({ message: "Metas financeiras atualizadas." });
 }
 
+async function listAdminAppointments(env, shopId, url) {
+  const date = url.searchParams.get("date");
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const status = url.searchParams.get("status");
+  for (const value of [date, from, to].filter(Boolean)) {
+    if (!validDate(value)) return json({ error: "A data deve usar AAAA-MM-DD." }, 400);
+  }
+  if (status && !["scheduled", "completed", "cancelled"].includes(status)) {
+    return json({ error: "Status de agendamento inválido." }, 400);
+  }
+  const conditions = ["a.barbershop_id=?"];
+  const params = [shopId];
+  if (date) { conditions.push("substr(a.starts_at,1,10)=?"); params.push(date); }
+  if (from) { conditions.push("substr(a.starts_at,1,10)>=?"); params.push(from); }
+  if (to) { conditions.push("substr(a.starts_at,1,10)<=?"); params.push(to); }
+  if (status) { conditions.push("a.status=?"); params.push(status); }
+  const rows = await env.DB.prepare(
+    "SELECT a.id,a.barber_id,a.service_name,a.price_cents,a.duration_minutes,a.starts_at,a.ends_at,a.status,a.cancellation_reason,c.name AS customer_name,u.name AS barber_name FROM appointments a JOIN customers c ON c.id=a.customer_id AND c.barbershop_id=a.barbershop_id LEFT JOIN users u ON u.id=a.barber_id AND u.barbershop_id=a.barbershop_id WHERE " + conditions.join(" AND ") + " ORDER BY a.starts_at LIMIT 500"
+  ).bind(...params).all();
+  return json({ appointments: rows.results || [] });
+}
+
+async function cancelAdminAppointment(request, env, shopId, appointmentId) {
+  const data = await request.json().catch(() => null);
+  if (!data || typeof data !== "object") return json({ error: "Informe o motivo do cancelamento." }, 400);
+  const reason = String(data.reason || "").trim();
+  if (!reason || reason.length > 250) return json({ error: "O motivo deve ter entre 1 e 250 caracteres." }, 400);
+  const result = await env.DB.prepare(
+    "UPDATE appointments SET status='cancelled',cancellation_reason=?,cancelled_at=CURRENT_TIMESTAMP WHERE id=? AND barbershop_id=? AND status='scheduled'"
+  ).bind(reason, appointmentId, shopId).run();
+  if (!result.meta.changes) return json({ error: "Agendamento ativo não encontrado nesta barbearia." }, 404);
+  return json({ message: "Agendamento cancelado com sucesso." });
+}
+
+async function assignAppointmentBarber(request, env, shopId, appointmentId) {
+  const data = await request.json().catch(() => null);
+  if (!data || typeof data !== "object") return json({ error: "Informe o profissional do agendamento." }, 400);
+  let barberId = null, commissionPercent = null;
+  if (data.barber_id !== null && data.barber_id !== "") {
+    barberId = Number(data.barber_id);
+    if (!Number.isSafeInteger(barberId) || barberId < 1) return json({ error: "Selecione um profissional válido." }, 400);
+    const staff = await env.DB.prepare(
+      "SELECT id,commission_percent FROM users WHERE id=? AND barbershop_id=? AND is_active=1 AND (role='barber' OR (role='owner' AND can_serve=1))"
+    ).bind(barberId, shopId).first();
+    if (!staff) return json({ error: "Esse profissional não está disponível para atendimento." }, 400);
+    commissionPercent = staff.commission_percent || 0;
+  }
+  const appointment = await env.DB.prepare(
+    "SELECT id,starts_at,ends_at,status FROM appointments WHERE id=? AND barbershop_id=?"
+  ).bind(appointmentId, shopId).first();
+  if (!appointment) return json({ error: "Agendamento não encontrado." }, 404);
+  if (appointment.status !== "scheduled") return json({ error: "Só é possível editar o barbeiro de um agendamento ativo." }, 409);
+  if (barberId !== null) {
+    const conflict = await env.DB.prepare(
+      "SELECT id FROM appointments WHERE barbershop_id=? AND barber_id=? AND id<>? AND status='scheduled' AND starts_at<? AND ends_at>? LIMIT 1"
+    ).bind(shopId, barberId, appointmentId, appointment.ends_at, appointment.starts_at).first();
+    if (conflict) return json({ error: "Esse profissional já possui outro atendimento nesse horário." }, 409);
+  }
+  try {
+    const result = await env.DB.prepare(
+      "UPDATE appointments SET barber_id=?,commission_percent=?,commission_cents=0 WHERE id=? AND barbershop_id=? AND status='scheduled'"
+    ).bind(barberId, commissionPercent, appointmentId, shopId).run();
+    if (!result.meta.changes) return json({ error: "Agendamento não encontrado ou já alterado." }, 409);
+    return json({ message: "Profissional do agendamento atualizado." });
+  } catch (error) {
+    if (String(error?.message || error).includes("appointment_conflict")) {
+      return json({ error: "Esse profissional já possui outro atendimento nesse horário." }, 409);
+    }
+    throw error;
+  }
+}
+
+async function completeAdminAppointment(env, shopId, appointmentId) {
+  const row = await env.DB.prepare(
+    "SELECT a.id,a.service_name,a.price_cents,a.starts_at,a.commission_percent,u.commission_percent AS current_commission_percent FROM appointments a LEFT JOIN users u ON u.id=a.barber_id AND u.barbershop_id=a.barbershop_id WHERE a.id=? AND a.barbershop_id=? AND a.status='scheduled'"
+  ).bind(appointmentId, shopId).first();
+  if (!row) return json({ error: "Agendamento ativo não encontrado." }, 404);
+  const percent = row.commission_percent ?? row.current_commission_percent ?? 0;
+  const cents = Math.round(Number(row.price_cents) * Number(percent) / 100);
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE appointments SET status='completed',commission_percent=?,commission_cents=? WHERE id=? AND barbershop_id=? AND status='scheduled'"
+    ).bind(percent, cents, appointmentId, shopId),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO finance_entries(barbershop_id,entry_type,description,category,amount_cents,entry_date,appointment_id) VALUES(?,'income',?,'Atendimentos',?,date(?),?)"
+    ).bind(shopId, "Atendimento concluído: " + row.service_name, row.price_cents, row.starts_at, appointmentId)
+  ]);
+  return json({ message: "Atendimento concluído e registrado no financeiro.", commission_cents: cents });
+}
+
 export async function handleAdminApi(request, env, url) {
   if (!url.pathname.startsWith("/api/admin/")) return null;
   const session = await readOwnerSession(request, env);
@@ -257,6 +348,17 @@ export async function handleAdminApi(request, env, url) {
     return json({ error: "Acesso não autorizado. Faça login como proprietário." }, 401);
   }
   const shopId = session.barbershop_id;
+
+  if (url.pathname === "/api/admin/appointments" && request.method === "GET") return listAdminAppointments(env, shopId, url);
+
+  const cancelAppointment = url.pathname.match(/^\/api\/admin\/appointments\/(\d+)\/cancel$/);
+  if (cancelAppointment && request.method === "POST") return cancelAdminAppointment(request, env, shopId, Number(cancelAppointment[1]));
+
+  const assignBarber = url.pathname.match(/^\/api\/admin\/appointments\/(\d+)\/barber$/);
+  if (assignBarber && request.method === "PATCH") return assignAppointmentBarber(request, env, shopId, Number(assignBarber[1]));
+
+  const completeAppointment = url.pathname.match(/^\/api\/admin\/appointments\/(\d+)\/complete$/);
+  if (completeAppointment && request.method === "POST") return completeAdminAppointment(env, shopId, Number(completeAppointment[1]));
 
   if (url.pathname === "/api/admin/finance/config" && request.method === "GET") return getFinancialConfig(env, shopId);
   if (url.pathname === "/api/admin/finance/config" && request.method === "PUT") return saveFinancialConfig(request, env, shopId);
