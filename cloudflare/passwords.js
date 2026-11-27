@@ -3,7 +3,7 @@ import scryptJs from "scrypt-js";
 const { scrypt } = scryptJs;
 
 const encoder = new TextEncoder();
-const CURRENT_ITERATIONS = 310000;
+const CURRENT_ITERATIONS = 100000;
 
 function toHex(bytes) {
   return Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
@@ -44,7 +44,7 @@ export async function verifyPassword(stored, password) {
       const iterations = Number(parts[1]);
       const salt = fromHex(parts[2]);
       const expected = fromHex(parts[3]);
-      if (!Number.isSafeInteger(iterations) || iterations < 1 || iterations > 2000000 || expected.length < 16) return false;
+      if (!Number.isSafeInteger(iterations) || iterations < 1 || iterations > 100000 || expected.length < 16) return false;
       return safeEqual(await pbkdf2(password, salt, iterations, expected.length), expected);
     }
 
