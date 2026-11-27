@@ -853,3 +853,84 @@ def admin_panel_page():
     """Entrega a interface do proprietário; os dados seguem protegidos pelas APIs."""
 
     return render_template("admin.html")
+
+
+@admin_bp.route("/barbershop", methods=["GET"])
+@active_owner_required
+def get_barbershop_settings():
+    """Retorna os dados básicos e a logo da barbearia autenticada."""
+
+    row = get_db().execute(
+        "SELECT name, logo_data FROM barbershops WHERE id = ?",
+        (session["barbershop_id"],)
+    ).fetchone()
+    if row is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+
+    return jsonify({"name": row["name"], "logo_data": row["logo_data"]}), 200
+
+
+@admin_bp.route("/barbershop/logo", methods=["POST"])
+@active_owner_required
+def upload_barbershop_logo():
+    """Salva uma logo rasterizada pequena diretamente no banco da barbearia."""
+
+    import base64
+
+    image = request.files.get("logo")
+    if image is None:
+        return jsonify({"error": "Selecione uma imagem para enviar."}), 400
+
+    raw = image.read(512 * 1024 + 1)
+    if not raw or len(raw) > 512 * 1024:
+        return jsonify({"error": "A imagem deve ter no máximo 512 KB."}), 400
+
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        mime = "image/png"
+    elif raw.startswith(b"\xff\xd8\xff"):
+        mime = "image/jpeg"
+    elif raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        mime = "image/webp"
+    elif raw[:6] in (b"GIF87a", b"GIF89a"):
+        mime = "image/gif"
+    else:
+        return jsonify({"error": "Use uma imagem PNG, JPG, WEBP ou GIF válida."}), 400
+
+    logo_data = "data:" + mime + ";base64," + base64.b64encode(raw).decode("ascii")
+    db = get_db()
+    db.execute(
+        "UPDATE barbershops SET logo_data = ? WHERE id = ?",
+        (logo_data, session["barbershop_id"])
+    )
+    db.commit()
+
+    return jsonify({"message": "Logo atualizada com sucesso.", "logo_data": logo_data}), 200
+
+
+@admin_bp.route("/customers", methods=["GET"])
+@active_owner_required
+def list_customers():
+    """Lista os clientes cadastrados nesta barbearia, sem misturar instalações."""
+
+    rows = get_db().execute(
+        """
+        SELECT id, name, phone, created_at
+        FROM customers
+        WHERE barbershop_id = ?
+        ORDER BY name COLLATE NOCASE
+        LIMIT 1000
+        """,
+        (session["barbershop_id"],)
+    ).fetchall()
+
+    return jsonify({
+        "customers": [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "phone": row["phone"],
+                "created_at": row["created_at"]
+            }
+            for row in rows
+        ]
+    }), 200
