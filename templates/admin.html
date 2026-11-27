@@ -594,13 +594,13 @@ async function loadFinance(){
 let currentFinancialConfig={fixed_costs:[],desired_profit_cents:0};
 function renderFixedCosts(costs){
  const root=$('fixed-costs-list');root.replaceChildren();
- if(!costs.length){root.append(empty('Nenhuma despesa fixa cadastrada.'));return;}
- costs.forEach((cost,index)=>{
+ if(!costs.length){root.append(empty('Nenhuma despesa fixa cadastrada.'));}
+ else costs.forEach((cost,index)=>{
   root.append(row(cost.name,money(cost.amount_cents)+' por mês',[
    action('Remover','danger',()=>{currentFinancialConfig.fixed_costs.splice(index,1);renderFixedCosts(currentFinancialConfig.fixed_costs);renderGoalProgress();})
   ]));
  });
- const total=costs.reduce((sum,cost)=>sum+Number(cost.amount_cents||0),0);
+ const total=(costs||[]).reduce((sum,cost)=>sum+Number(cost.amount_cents||0),0);
  $('fixed-costs-total').textContent=money(total);
  $('monthly-goal-total').textContent=money(total+Number(currentFinancialConfig.desired_profit_cents||0));
 }
@@ -615,7 +615,7 @@ function renderGoalProgress(){
  $('goal-progress-summary').textContent=goal?money(achieved)+' de '+money(goal):'Cadastre despesas e defina seu lucro desejado.';
  $('goal-progress-percent').textContent=Math.round(percent)+'%';
  $('goal-calculation').textContent=names[period]+' · A meta mensal considera '+money(currentFinance.fixed_costs_total_cents||0)+' em despesas fixas e '+money(currentFinance.desired_profit_cents||0)+' de lucro desejado. O progresso soma somente atendimentos concluídos.';
- const total=Number(currentFinancialConfig.fixed_costs||[]).reduce((sum,cost)=>sum+Number(cost.amount_cents||0),0);
+ const total=(currentFinancialConfig.fixed_costs||[]).reduce((sum,cost)=>sum+Number(cost.amount_cents||0),0);
  $('fixed-costs-total').textContent=money(total);
  $('monthly-goal-total').textContent=money(total+Number(currentFinancialConfig.desired_profit_cents||0));
 }
