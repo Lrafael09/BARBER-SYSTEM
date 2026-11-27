@@ -1,27 +1,204 @@
 """
 BARBER-SYSTEM
-Módulo inicial das rotas do colaborador/barbeiro.
+Autenticação e área do colaborador/barbeiro.
 
-Este módulo reunirá as páginas e ações disponíveis ao profissional,
-como agenda, atendimentos e consulta das próprias comissões.
-
-As rotas e consultas reais serão adicionadas gradualmente.
-O acesso deverá ser protegido por autenticação e autorização,
-garantindo que cada barbeiro veja somente os próprios dados.
+O profissional entra pelo endereço da própria barbearia,
+informando seu identificador e PIN de quatro dígitos.
+As tentativas são limitadas e registradas no banco.
 """
 
-from flask import Blueprint, jsonify
+import time
+from functools import wraps
+
+from flask import Blueprint, jsonify, request, session
+from werkzeug.security import check_password_hash
+
+from database import get_db
 
 
-# Grupo de rotas reservado aos colaboradores.
 barber_bp = Blueprint("barber", __name__, url_prefix="/barber")
 
+MAX_PIN_ATTEMPTS = 5
+PIN_WINDOW_SECONDS = 15 * 60
+PIN_LOCK_SECONDS = 15 * 60
 
-@barber_bp.route("/", methods=["GET"])
-def barber_home():
-    """Endpoint inicial do módulo do colaborador."""
+
+def barber_required(view):
+    """Permite acesso somente ao colaborador autenticado e ainda ativo."""
+
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if session.get("user_role") != "barber" or not session.get("user_id"):
+            return jsonify({"error": "Acesso não autorizado. Faça login."}), 401
+
+        barber = get_db().execute(
+            """
+            SELECT id
+            FROM users
+            WHERE id = ?
+              AND barbershop_id = ?
+              AND role = 'barber'
+              AND is_active = 1
+            """,
+            (session["user_id"], session.get("barbershop_id"))
+        ).fetchone()
+
+        if barber is None:
+            session.clear()
+            return jsonify({
+                "error": "Sessão inválida. Faça login novamente."
+            }), 401
+
+        return view(*args, **kwargs)
+
+    return wrapped_view
+
+
+@barber_bp.route("/<slug>/<int:barber_id>/login", methods=["POST"])
+def login_barber(slug, barber_id):
+    """Autentica um barbeiro pelo PIN e aplica bloqueio temporário."""
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie o PIN em formato JSON."}), 400
+
+    pin = data.get("pin", "")
+    if not isinstance(pin, str) or len(pin) != 4 or not pin.isdigit():
+        return jsonify({"error": "O PIN deve conter quatro números."}), 400
+
+    db = get_db()
+
+    barber = db.execute(
+        """
+        SELECT users.id, users.barbershop_id, users.name, users.pin_hash,
+               barbershops.slug
+        FROM users
+        INNER JOIN barbershops
+            ON barbershops.id = users.barbershop_id
+        WHERE barbershops.slug = ?
+          AND users.id = ?
+          AND users.role = 'barber'
+          AND users.is_active = 1
+        """,
+        (slug, barber_id)
+    ).fetchone()
+
+    if barber is None or not barber["pin_hash"]:
+        return jsonify({"error": "PIN ou acesso inválido."}), 401
+
+    # O endereço IP integra a chave de limitação. Em produção, se houver
+    # proxy reverso, a aplicação deverá confiar somente no proxy configurado.
+    ip_address = request.remote_addr or "unknown"
+    scope_key = f"barber-pin:{barber['barbershop_id']}:{barber_id}:{ip_address}"
+    now = int(time.time())
+
+    db.execute("BEGIN IMMEDIATE")
+    attempt = db.execute(
+        """
+        SELECT failed_attempts, window_started_at, locked_until
+        FROM login_attempts
+        WHERE scope_key = ?
+        """,
+        (scope_key,)
+    ).fetchone()
+
+    if attempt and attempt["locked_until"] and attempt["locked_until"] > now:
+        db.rollback()
+        return jsonify({
+            "error": "Muitas tentativas. Aguarde 15 minutos para tentar novamente."
+        }), 429
+
+    if attempt is None or now - attempt["window_started_at"] >= PIN_WINDOW_SECONDS:
+        failed_attempts = 0
+        window_started_at = now
+    else:
+        failed_attempts = attempt["failed_attempts"]
+        window_started_at = attempt["window_started_at"]
+
+    valid_pin = check_password_hash(barber["pin_hash"], pin)
+
+    if not valid_pin:
+        failed_attempts += 1
+        locked_until = (
+            now + PIN_LOCK_SECONDS
+            if failed_attempts >= MAX_PIN_ATTEMPTS
+            else None
+        )
+
+        db.execute(
+            """
+            INSERT INTO login_attempts (
+                scope_key, failed_attempts, window_started_at, locked_until
+            )
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(scope_key) DO UPDATE SET
+                failed_attempts = excluded.failed_attempts,
+                window_started_at = excluded.window_started_at,
+                locked_until = excluded.locked_until
+            """,
+            (scope_key, failed_attempts, window_started_at, locked_until)
+        )
+        db.commit()
+
+        if locked_until:
+            return jsonify({
+                "error": "Limite de tentativas atingido. Acesso bloqueado por 15 minutos."
+            }), 429
+
+        return jsonify({"error": "PIN ou acesso inválido."}), 401
+
+    db.execute(
+        "DELETE FROM login_attempts WHERE scope_key = ?",
+        (scope_key,)
+    )
+    db.commit()
+
+    session.clear()
+    session["user_id"] = barber["id"]
+    session["barbershop_id"] = barber["barbershop_id"]
+    session["user_role"] = "barber"
 
     return jsonify({
-        "module": "barber",
-        "message": "Módulo do colaborador preparado."
+        "message": "Login realizado com sucesso.",
+        "barber": {
+            "id": barber["id"],
+            "name": barber["name"],
+            "role": "barber"
+        },
+        "barbershop": {
+            "slug": barber["slug"]
+        }
     }), 200
+
+
+@barber_bp.route("/me", methods=["GET"])
+@barber_required
+def current_barber():
+    """Retorna somente os dados básicos do profissional autenticado."""
+
+    barber = get_db().execute(
+        """
+        SELECT id, barbershop_id, name, role
+        FROM users
+        WHERE id = ? AND barbershop_id = ?
+        """,
+        (session["user_id"], session["barbershop_id"])
+    ).fetchone()
+
+    return jsonify({
+        "id": barber["id"],
+        "barbershop_id": barber["barbershop_id"],
+        "name": barber["name"],
+        "role": barber["role"]
+    }), 200
+
+
+@barber_bp.route("/logout", methods=["POST"])
+def logout_barber():
+    """Encerra a sessão atual do colaborador."""
+
+    if session.get("user_role") != "barber":
+        return jsonify({"error": "Nenhuma sessão de barbeiro ativa."}), 401
+
+    session.clear()
+    return jsonify({"message": "Logout realizado com sucesso."}), 200
