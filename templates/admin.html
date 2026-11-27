@@ -5,9 +5,47 @@
 <meta name="theme-color" content="#090909"><title>Administração | BARBER-SYSTEM</title>
 <style>
 :root{color-scheme:dark;--bg:#080909;--panel:#111414;--panel2:#171b19;--line:#292f2b;--muted:#9aa39c;--text:#f3f6f3;--accent:#a8f05a;--danger:#ff7777;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px solid transparent;border-radius:10px;padding:10px 14px;background:var(--accent);color:#10140c;font-weight:750}button:disabled{opacity:.5;cursor:not-allowed}button.secondary{background:#202622;color:#e9eee9;border-color:#343e36}button.ghost{background:transparent;color:#dce4dc;border-color:#39423a}button.danger{background:#351d1d;color:#ffb1b1;border-color:#653333}input,select,textarea{width:100%;padding:11px 12px;background:#0b0e0c;color:#f5f7f5;border:1px solid #39413b;border-radius:9px;min-width:0}input[type=checkbox]{width:auto;accent-color:var(--accent)}input[type=color]{height:44px;padding:4px}textarea{min-height:78px;resize:vertical}label{display:block;color:#b5beb6;font-size:12px;font-weight:650;margin:12px 0 6px}.muted{color:var(--muted);font-size:13px;line-height:1.5}.tiny{font-size:11px;color:#89938b}.hidden{display:none!important}.message{min-height:18px;margin-top:8px;color:var(--accent);font-size:13px;white-space:pre-wrap}.error{color:var(--danger)}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.row>*{min-width:0}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{width:auto}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.field-grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.stack{display:grid;gap:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}.panel h2,.panel h3{margin:0 0 8px}.section-head{margin-bottom:18px}.section-head h1{font-size:27px;margin:0 0 5px}.section-head p{margin:0}.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--accent);font-weight:800}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric{background:linear-gradient(140deg,#151b16,#101311);border:1px solid #2a352c;border-radius:14px;padding:15px}.metric span{display:block;color:#9ba69d;font-size:12px}.metric strong{display:block;font-size:24px;margin-top:7px;letter-spacing:-.03em}.metric small{color:#849087}.layout{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh}.sidebar{border-right:1px solid var(--line);background:#0b0e0c;padding:22px 14px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh}.logo-line{display:flex;align-items:center;gap:11px;padding:0 9px 16px;border-bottom:1px solid var(--line)}.mark{width:38px;height:38px;display:grid;place-items:center;border-radius:11px;background:var(--accent);color:#10140c;font-weight:950;font-size:18px}.logo-line strong{font-size:14px;letter-spacing:.09em}.logo-line small{display:block;color:#859087;font-size:10px;letter-spacing:.14em;margin-top:3px}.nav{display:grid;gap:5px}.nav button{width:100%;text-align:left;background:transparent;color:#aab4ac;border:1px solid transparent;padding:12px;font-weight:650;display:flex;align-items:center;gap:10px}.nav button.active,.nav button:hover{background:#1a211b;color:var(--accent);border-color:#2e3b2c}.nav .nav-icon{width:20px;text-align:center;font-size:15px}.sidebar-foot{margin-top:auto;padding:12px 9px;border-top:1px solid var(--line)}.main{padding:25px clamp(16px,3vw,38px) 60px;max-width:1600px;width:100%;margin:0 auto}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:26px}.topbar .shop-name{font-size:13px;color:#9da79e}.topbar button{width:auto}.view{display:none}.view.active{display:block}.two-col{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.8fr);gap:14px}.three-col{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.list{display:grid;gap:9px}.list-row{padding:13px;border:1px solid var(--line);border-radius:12px;background:#101411;display:flex;justify-content:space-between;gap:14px;align-items:center}.list-row .main-copy{min-width:0}.list-row strong{display:block;overflow-wrap:anywhere}.list-row p{margin:4px 0 0}.pill{display:inline-flex;align-items:center;padding:4px 8px;border-radius:100px;background:#1d2b1d;color:var(--accent);font-size:11px;font-weight:750}.pill.off{background:#2a2525;color:#c4a0a0}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:600px}th,td{text-align:left;padding:12px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}th{color:#9ba69d;font-weight:650;background:#141916}tr:last-child td{border-bottom:0}.progress{height:8px;background:#252d27;border-radius:100px;overflow:hidden;margin:8px 0}.progress span{display:block;height:100%;background:var(--accent);border-radius:100px}.chart{display:flex;align-items:end;gap:8px;height:150px;padding:15px 4px 0;border-bottom:1px solid var(--line)}.chart-col{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:end;align-items:center;gap:6px}.chart-bar{width:min(100%,34px);min-height:3px;background:linear-gradient(180deg,#b7f975,#4e7a33);border-radius:6px 6px 0 0}.chart-col small{font-size:10px;color:#8f9a91;white-space:nowrap}.day-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}.day-col{min-width:0;border:1px solid var(--line);border-radius:12px;background:#101411;padding:10px}.day-col.today{border-color:#779c54}.day-col h3{font-size:12px;margin:0 0 8px;color:#aab6ab}.day-col h3 span{display:block;color:var(--accent);font-size:16px;margin-top:3px}.event{background:#1b241b;border-left:3px solid var(--accent);border-radius:7px;padding:8px;margin:7px 0;font-size:11px;overflow-wrap:anywhere}.event.cancelled{border-color:#875050;background:#251a1a}.event.completed{border-color:#657f67}.event b{display:block;font-size:12px;margin-bottom:3px}.weekday-row{display:grid;grid-template-columns:110px repeat(5,minmax(0,1fr));gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.weekday-row:first-child{border-top:1px solid var(--line)}.inline{display:flex;gap:8px;align-items:center}.inline>*{flex:1}.inline input[type=checkbox]{flex:0}.schedule-row{display:grid;grid-template-columns:110px 70px repeat(4,minmax(0,1fr));gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.schedule-row .day-name{font-size:13px}.schedule-row input{padding:9px 7px;font-size:12px}.schedule-row .check{display:flex;align-items:center;gap:5px;font-size:11px;color:#aeb7af}.empty{padding:22px;text-align:center;border:1px dashed #3a453c;border-radius:12px;color:#97a199;font-size:13px}.auth-wrap{min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(ellipse at top,#182018 0,#080909 60%)}.auth-box{width:min(100%,920px)}.auth-head{text-align:center;margin-bottom:18px}.auth-head h1{font-size:26px;letter-spacing:.08em;margin:9px 0}.auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.brand-preview{width:76px;height:76px;object-fit:contain;border-radius:13px;background:#090b09;border:1px solid var(--line);padding:6px}.week-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.week-controls input{max-width:170px}.calendar-notes{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 15px}.calendar-notes span{color:#9ea79f;font-size:11px}.toggle{display:flex;align-items:center;gap:9px;margin-top:12px;color:#c4cec5;font-size:13px}.goal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.goal-card{padding:14px;background:#111712;border:1px solid #2c392d;border-radius:12px}.goal-card label{margin-top:0}.goal-card strong{font-size:14px}.public-link{color:var(--accent);overflow-wrap:anywhere}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px solid transparent;border-radius:10px;padding:10px 14px;background:var(--accent);color:#10140c;font-weight:750}button:disabled{opacity:.5;cursor:not-allowed}button.secondary{background:#202622;color:#e9eee9;border-color:#343e36}button.ghost{background:transparent;color:#dce4dc;border-color:#39423a}button.danger{background:#351d1d;color:#ffb1b1;border-color:#653333}input,select,textarea{width:100%;padding:11px 12px;background:#0b0e0c;color:#f5f7f5;border:1px solid #39413b;border-radius:9px;min-width:0}input[type=checkbox]{width:auto;accent-color:var(--accent)}input[type=color]{height:44px;padding:4px}textarea{min-height:78px;resize:vertical}label{display:block;color:#b5beb6;font-size:12px;font-weight:650;margin:12px 0 6px}.muted{color:var(--muted);font-size:13px;line-height:1.5}.tiny{font-size:11px;color:#89938b}.hidden{display:none!important}.message{min-height:18px;margin-top:8px;color:var(--accent);font-size:13px;white-space:pre-wrap}.error{color:var(--danger)}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.row>*{min-width:0}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{width:auto}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.field-grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.stack{display:grid;gap:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}.panel h2,.panel h3{margin:0 0 8px}.section-head{margin-bottom:18px}.section-head h1{font-size:27px;margin:0 0 5px}.section-head p{margin:0}.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--accent);font-weight:800}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric{background:linear-gradient(140deg,#151b16,#101311);border:1px solid #2a352c;border-radius:14px;padding:15px}.metric span{display:block;color:#9ba69d;font-size:12px}.metric strong{display:block;font-size:24px;margin-top:7px;letter-spacing:-.03em}.metric small{color:#849087}.layout{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh}.sidebar{border-right:1px solid var(--line);background:#0b0e0c;padding:22px 14px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh}.logo-line{display:flex;align-items:center;gap:11px;padding:0 9px 16px;border-bottom:1px solid var(--line)}.mark{width:38px;height:38px;display:grid;place-items:center;border-radius:11px;background:var(--accent);color:#10140c;font-weight:950;font-size:18px}.logo-line strong{font-size:14px;letter-spacing:.09em}.logo-line small{display:block;color:#859087;font-size:10px;letter-spacing:.14em;margin-top:3px}.nav{display:grid;gap:5px}.nav button{width:100%;text-align:left;background:transparent;color:#aab4ac;border:1px solid transparent;padding:12px;font-weight:650;display:flex;align-items:center;gap:10px}.nav button.active,.nav button:hover{background:#1a211b;color:var(--accent);border-color:#2e3b2c}.nav .nav-icon{width:20px;text-align:center;font-size:15px}.sidebar-foot{margin-top:auto;padding:12px 9px;border-top:1px solid var(--line)}.main{padding:25px clamp(16px,3vw,38px) 60px;max-width:1600px;width:100%;margin:0 auto}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:26px}.topbar .shop-name{font-size:13px;color:#9da79e}.topbar button{width:auto}.view{display:none}.view.active{display:block}.two-col{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.8fr);gap:14px}.three-col{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.list{display:grid;gap:9px}.list-row{padding:13px;border:1px solid var(--line);border-radius:12px;background:#101411;display:flex;justify-content:space-between;gap:14px;align-items:center}.list-row .main-copy{min-width:0}.list-row strong{display:block;overflow-wrap:anywhere}.list-row p{margin:4px 0 0}.pill{display:inline-flex;align-items:center;padding:4px 8px;border-radius:100px;background:#1d2b1d;color:var(--accent);font-size:11px;font-weight:750}.pill.off{background:#2a2525;color:#c4a0a0}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:600px}th,td{text-align:left;padding:12px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}th{color:#9ba69d;font-weight:650;background:#141916}tr:last-child td{border-bottom:0}.progress{height:8px;background:#252d27;border-radius:100px;overflow:hidden;margin:8px 0}.progress span{display:block;height:100%;background:var(--accent);border-radius:100px}.chart{display:flex;align-items:end;gap:8px;height:150px;padding:15px 4px 0;border-bottom:1px solid var(--line)}.chart-col{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:end;align-items:center;gap:6px}.chart-bar{width:min(100%,34px);min-height:3px;background:linear-gradient(180deg,#b7f975,#4e7a33);border-radius:6px 6px 0 0}.chart-col small{font-size:10px;color:#8f9a91;white-space:nowrap}.day-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}.day-col{min-width:0;border:1px solid var(--line);border-radius:12px;background:#101411;padding:10px}.day-col.today{border-color:#779c54}.day-col h3{font-size:12px;margin:0 0 8px;color:#aab6ab}.day-col h3 span{display:block;color:var(--accent);font-size:16px;margin-top:3px}.event{background:#1b241b;border-left:3px solid var(--accent);border-radius:7px;padding:8px;margin:7px 0;font-size:11px;overflow-wrap:anywhere}.event.cancelled{border-color:#875050;background:#251a1a}.event.completed{border-color:#657f67}.event b{display:block;font-size:12px;margin-bottom:3px}.weekday-row{display:grid;grid-template-columns:110px repeat(5,minmax(0,1fr));gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.weekday-row:first-child{border-top:1px solid var(--line)}.inline{display:flex;gap:8px;align-items:center}.inline>*{flex:1}.inline input[type=checkbox]{flex:0}.schedule-row{display:grid;grid-template-columns:110px 70px repeat(4,minmax(0,1fr));gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.schedule-row .day-name{font-size:13px}.schedule-row input{padding:9px 7px;font-size:12px}.schedule-row .check{display:flex;align-items:center;gap:5px;font-size:11px;color:#aeb7af}
+.agenda-toolbar{align-items:center}.agenda-filters{display:flex;gap:8px;align-items:center}.agenda-filters select{width:auto;min-width:170px;max-width:240px}
+.calendar-scroll{overflow:auto;border:1px solid var(--line);border-radius:13px;background:#0c100d;max-height:760px}
+.calendar-grid{display:grid;min-width:100%;width:max-content;grid-template-rows:52px auto}
+.calendar-head-row{display:grid;grid-template-columns:68px repeat(var(--lane-count),minmax(190px,1fr));position:sticky;top:0;z-index:4;background:#151b16;border-bottom:1px solid #303a32}
+.calendar-head-cell{padding:14px 10px;font-size:12px;font-weight:800;color:#dce6dc;border-left:1px solid #303a32;white-space:nowrap}
+.calendar-head-cell:first-child{border-left:0}
+.calendar-body-row{display:grid;grid-template-columns:68px repeat(var(--lane-count),minmax(190px,1fr))}
+.calendar-time-axis{position:relative;background:#111713;border-right:1px solid #303a32}
+.calendar-time-label{position:absolute;right:8px;transform:translateY(-7px);font-size:10px;color:#87948a;font-variant-numeric:tabular-nums}
+.calendar-lane{position:relative;min-width:190px;border-right:1px solid #29322b;background:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--hour-height) - 1px),#29322b calc(var(--hour-height) - 1px),#29322b var(--hour-height))}
+.calendar-lane:last-child{border-right:0}
+.calendar-lane-empty{position:absolute;top:18px;left:8px;right:8px;text-align:center;color:#667168;font-size:11px;pointer-events:none}
+.calendar-appointment{position:absolute;left:5px;right:5px;z-index:2;padding:5px 6px;border-radius:8px;border-left:3px solid var(--accent);background:#1b2a1b;color:#eff8e9;overflow:hidden;min-height:28px;box-shadow:0 2px 8px #0005}
+.calendar-appointment.completed{background:#202b22;border-left-color:#a7c7a7}
+.calendar-appointment.cancelled{background:#2a1b1b;border-left-color:#b66c6c;color:#f0dada}
+.calendar-appointment .appt-time{display:block;font-size:9px;color:#b6c8b2;line-height:1.2;margin-bottom:2px;font-variant-numeric:tabular-nums}
+.calendar-appointment strong{display:block;font-size:11px;line-height:1.25;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.calendar-appointment .appt-service{display:block;font-size:10px;color:#b6c2b7;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;margin-top:2px}
+.calendar-actions{display:flex;gap:4px;margin-top:4px}
+.calendar-actions button{width:auto;min-height:17px;padding:1px 6px;border-radius:5px;font-size:9px;line-height:1.2}
+.calendar-actions .calendar-cancel{background:#432525;color:#ffc0c0;border:1px solid #714141}
+.hours-list{display:grid;gap:8px;margin:14px 0}
+.hours-row{display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:11px;background:#0e130f}
+.hours-row.is-closed .hours-config{opacity:.4}
+.hours-day{display:grid;gap:8px}
+.hours-day-name{font-size:13px;font-weight:750;color:#e5ece5;padding-top:2px}
+.hours-check{display:flex;align-items:center;gap:7px;color:#aeb9af;font-size:11px}
+.hours-check input{margin:0}
+.hours-config{display:grid;gap:8px;min-width:0}
+.hours-times,.hours-break-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.hours-field label{margin:0 0 5px;font-size:10px;color:#9eaaa0}
+.hours-field input{padding:8px 9px;font-size:12px}
+.hours-break{border-top:1px solid #263027;padding-top:7px}
+.hours-break summary{font-size:11px;color:#a8f05a;cursor:pointer;user-select:none}
+.hours-break-fields{margin-top:8px}
+.hours-row.is-closed .hours-config input{cursor:not-allowed}
+.empty{padding:22px;text-align:center;border:1px dashed #3a453c;border-radius:12px;color:#97a199;font-size:13px}.auth-wrap{min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(ellipse at top,#182018 0,#080909 60%)}.auth-box{width:min(100%,920px)}.auth-head{text-align:center;margin-bottom:18px}.auth-head h1{font-size:26px;letter-spacing:.08em;margin:9px 0}.auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.brand-preview{width:76px;height:76px;object-fit:contain;border-radius:13px;background:#090b09;border:1px solid var(--line);padding:6px}.week-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.week-controls input{max-width:170px}.calendar-notes{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 15px}.calendar-notes span{color:#9ea79f;font-size:11px}.toggle{display:flex;align-items:center;gap:9px;margin-top:12px;color:#c4cec5;font-size:13px}.goal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.goal-card{padding:14px;background:#111712;border:1px solid #2c392d;border-radius:12px}.goal-card label{margin-top:0}.goal-card strong{font-size:14px}.public-link{color:var(--accent);overflow-wrap:anywhere}
 @media(max-width:1100px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-col{grid-template-columns:1fr}.layout{grid-template-columns:220px minmax(0,1fr)}.sidebar{padding:17px 10px}}
-@media(max-width:760px){.layout{display:block}.sidebar{position:relative;height:auto;padding:10px;border-right:0;border-bottom:1px solid var(--line);gap:9px}.logo-line{padding:4px 7px 10px}.nav{display:flex;overflow:auto;gap:5px}.nav button{width:auto;white-space:nowrap;padding:9px 11px}.nav .nav-icon{display:none}.sidebar-foot{display:none}.main{padding:18px 12px 40px}.topbar{margin-bottom:18px}.day-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.field-grid.three,.goal-grid{grid-template-columns:1fr 1fr}.schedule-row{grid-template-columns:80px 55px repeat(2,minmax(0,1fr))}.schedule-row .optional{display:none}}
+@media(max-width:900px){.hours-row{grid-template-columns:100px minmax(0,1fr)}.calendar-scroll{max-height:680px}}
+@media(max-width:760px){.agenda-filters{width:100%}.agenda-filters select{flex:1;min-width:0;max-width:none}.hours-row{grid-template-columns:1fr}.hours-day{display:flex;align-items:center;justify-content:space-between}.calendar-head-row,.calendar-body-row{grid-template-columns:58px repeat(var(--lane-count),minmax(175px,1fr))}.calendar-lane{min-width:175px}.layout{display:block}.sidebar{position:relative;height:auto;padding:10px;border-right:0;border-bottom:1px solid var(--line);gap:9px}.logo-line{padding:4px 7px 10px}.nav{display:flex;overflow:auto;gap:5px}.nav button{width:auto;white-space:nowrap;padding:9px 11px}.nav .nav-icon{display:none}.sidebar-foot{display:none}.main{padding:18px 12px 40px}.topbar{margin-bottom:18px}.day-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.field-grid.three,.goal-grid{grid-template-columns:1fr 1fr}.schedule-row{grid-template-columns:80px 55px repeat(2,minmax(0,1fr))}.schedule-row .optional{display:none}}
 @media(max-width:520px){.auth-grid,.field-grid,.field-grid.three,.field-grid.four,.goal-grid,.three-col{grid-template-columns:1fr}.metric-grid{grid-template-columns:1fr 1fr}.metric strong{font-size:20px}.panel{padding:14px}.section-head h1{font-size:23px}.day-grid{grid-template-columns:1fr}.list-row{align-items:flex-start;flex-direction:column}.weekday-row{grid-template-columns:82px repeat(2,minmax(0,1fr))}.week-controls input{max-width:100%}}
 </style>
 </head>
@@ -70,14 +108,20 @@
     </section>
 
     <section class="view" id="view-agenda">
-      <div class="section-head"><h1>Agenda</h1><p class="muted">Visualize a semana inteira e acompanhe cada atendimento.</p></div>
+      <div class="section-head"><h1>Agenda</h1><p class="muted">Acompanhe os atendimentos em uma grade diária, organizada por profissional e horário.</p></div>
       <section class="panel">
-        <div class="row"><div class="week-controls"><button class="ghost" id="week-prev">‹</button><input type="date" id="week-date"><button class="ghost" id="week-next">›</button><button class="secondary" id="week-today">Hoje</button></div><select id="agenda-status" style="width:auto"><option value="">Todos os status</option><option value="scheduled">Agendados</option><option value="completed">Concluídos</option><option value="cancelled">Cancelados</option></select></div>
-        <div class="calendar-notes"><span>Verde: agendado</span><span>Contorno: concluído</span><span>Vermelho: cancelado</span></div>
-        <div id="week-calendar" class="day-grid"></div><div id="agenda-message" class="message"></div>
+        <div class="row agenda-toolbar">
+          <div class="week-controls"><button class="ghost" id="agenda-prev" aria-label="Dia anterior">‹</button><input type="date" id="agenda-date"><button class="ghost" id="agenda-next" aria-label="Próximo dia">›</button><button class="secondary" id="agenda-today">Hoje</button></div>
+          <div class="agenda-filters">
+            <select id="agenda-professional" aria-label="Filtrar profissional"><option value="">Todos os profissionais</option></select>
+            <select id="agenda-status" aria-label="Filtrar status"><option value="">Todos os status</option><option value="scheduled">Agendados</option><option value="completed">Concluídos</option><option value="cancelled">Cancelados</option></select>
+          </div>
+        </div>
+        <div class="calendar-notes"><span>Verde: agendado</span><span>Verde-claro: concluído</span><span>Vermelho: cancelado</span></div>
+        <div id="day-calendar" class="calendar-scroll"></div><div id="agenda-message" class="message"></div>
       </section>
       <div class="two-col" style="margin-top:14px">
-        <section class="panel"><h2>Expediente da barbearia</h2><p class="muted">Defina abertura, fechamento e intervalo de cada dia. Clique no dia para ajustar.</p><div id="business-schedule"></div><button id="save-business-schedule">Salvar expediente</button><div id="schedule-message" class="message"></div></section>
+        <section class="panel"><h2>Funcionamento da barbearia</h2><p class="muted">Defina em quais dias abre e os horários de entrada e saída. O intervalo é opcional e fica nas opções de cada dia.</p><div id="business-schedule" class="hours-list"></div><button id="save-business-schedule">Salvar funcionamento</button><div id="schedule-message" class="message"></div></section>
         <section class="panel"><h2>Folgas e bloqueios</h2><p class="muted">Bloqueie um horário para toda a barbearia ou para um profissional.</p>
           <label for="block-professional">Profissional</label><select id="block-professional"><option value="">Toda a barbearia</option></select>
           <div class="field-grid"><div><label for="block-start">Início</label><input id="block-start" type="datetime-local"></div><div><label for="block-end">Fim</label><input id="block-end" type="datetime-local"></div></div>
@@ -106,7 +150,7 @@
         <section class="panel"><h2>O proprietário também atende?</h2><p class="muted">Ative esta opção para aparecer na página pública como profissional. O PIN será diferente da senha do painel.</p><label class="toggle"><input type="checkbox" id="owner-can-serve"> Quero receber agendamentos como profissional</label><label for="owner-pin">PIN do proprietário (4 números)</label><input id="owner-pin" inputmode="numeric" maxlength="4" type="password"><button id="save-owner-provider">Salvar disponibilidade</button><div id="owner-provider-message" class="message"></div></section>
       </div>
       <section class="panel" style="margin-top:14px"><div class="row"><h2>Equipe cadastrada</h2><button class="ghost" id="refresh-team">Atualizar</button></div><div id="team-list" class="list"></div></section>
-      <section class="panel hidden" id="staff-schedule-panel" style="margin-top:14px"><div class="row"><div><h2 id="staff-schedule-title">Horários individuais</h2><p class="muted">Quando não há horários individuais cadastrados, o profissional usa o expediente geral.</p></div><button class="ghost" id="close-staff-schedule">Fechar</button></div><div id="staff-schedule-form"></div><button id="save-staff-schedule">Salvar horários individuais</button><div id="staff-schedule-message" class="message"></div></section>
+      <section class="panel hidden" id="staff-schedule-panel" style="margin-top:14px"><div class="row"><div><h2 id="staff-schedule-title">Expediente do profissional</h2><p class="muted">Defina os dias e os horários em que atende. Por padrão, o profissional acompanha o funcionamento da barbearia.</p></div><div class="actions"><button class="secondary hidden" id="reset-staff-schedule">Usar horário da barbearia</button><button class="ghost" id="close-staff-schedule">Fechar</button></div></div><div id="staff-schedule-form" class="hours-list"></div><button id="save-staff-schedule">Salvar expediente</button><div id="staff-schedule-message" class="message"></div></section>
     </section>
 
     <section class="view" id="view-customers">
@@ -180,7 +224,7 @@ async function startApp(){
  $('public-link').href=publicUrl;$('collaborator-link').href=staffUrl;
  $('settings-public-link').href=publicUrl;$('settings-public-link').textContent=location.origin+publicUrl;
  $('settings-collaborator-link').href=staffUrl;$('settings-collaborator-link').textContent=location.origin+staffUrl;
- $('week-date').value=toLocalInputDate(new Date());$('entry-date').value=toLocalInputDate(new Date());
+ $('agenda-date').value=toLocalInputDate(new Date());$('entry-date').value=toLocalInputDate(new Date());
  await loadOverview();
 }
 async function checkRegistration(){
@@ -247,63 +291,151 @@ function renderChart(root,entries){
 
 function mondayOf(value){const d=new Date(value+'T12:00:00');const offset=(d.getDay()+6)%7;d.setDate(d.getDate()-offset);return d;}
 function shiftDate(value,days){const d=new Date(value+'T12:00:00');d.setDate(d.getDate()+days);return toLocalInputDate(d);}
+let lastAgendaAppointments=[];
+let lastBusinessDays=[];
+function dateWeekday(value){return (new Date(value+'T12:00:00').getDay()+6)%7;}
+function clockMinutes(value){if(!value)return null;const parts=value.split(':').map(Number);return parts[0]*60+parts[1];}
+function populateAgendaStaff(staff){
+ const select=$('agenda-professional');const old=select.value;
+ select.replaceChildren(new Option('Todos os profissionais',''));
+ staff.filter(x=>x.is_active&&(x.role==='barber'||x.can_serve)).forEach(x=>{
+  select.add(new Option(x.name+(x.role==='owner'?' · Você':''),String(x.id)));
+ });
+ if([...select.options].some(o=>o.value===old))select.value=old;
+}
 async function loadAgenda(){
- const selected=$('week-date').value||toLocalInputDate(new Date());$('week-date').value=selected;
- const monday=mondayOf(selected),sunday=new Date(monday);sunday.setDate(sunday.getDate()+6);
- const from=toLocalInputDate(monday),to=toLocalInputDate(sunday);
- const q=new URLSearchParams({from,to});if($('agenda-status').value)q.set('status',$('agenda-status').value);
- const [data,schedule,blocks,staff]=await Promise.all([api('/admin/appointments?'+q),api('/admin/schedule'),api('/admin/blocks'),api('/admin/barbers')]);
- renderWeek(data.appointments,monday);
+ const selected=$('agenda-date').value||toLocalInputDate(new Date());$('agenda-date').value=selected;
+ const q=new URLSearchParams({date:selected});if($('agenda-status').value)q.set('status',$('agenda-status').value);
+ const [data,schedule,blocks,staff]=await Promise.all([
+  api('/admin/appointments?'+q),api('/admin/schedule'),api('/admin/blocks'),api('/admin/barbers')
+ ]);
+ cachedStaff=staff.barbers;lastAgendaAppointments=data.appointments;lastBusinessDays=schedule.days;
+ populateBlockStaff();populateAgendaStaff(cachedStaff);
+ renderDailyCalendar(lastAgendaAppointments,selected,lastBusinessDays,cachedStaff);
  renderBusinessSchedule(schedule.days);
  renderBlocks(blocks.blocks);
- cachedStaff=staff.barbers;populateBlockStaff();
 }
-function renderWeek(appointments,monday){
- const root=$('week-calendar');root.replaceChildren();
- for(let i=0;i<7;i++){
-  const day=new Date(monday);day.setDate(day.getDate()+i);const key=toLocalInputDate(day);
-  const col=document.createElement('div');col.className='day-col';if(key===toLocalInputDate(new Date()))col.classList.add('today');
-  const h=document.createElement('h3');h.textContent=weekdays[i];h.title='Clique para configurar funcionamento ou folga';h.style.cursor='pointer';h.addEventListener('click',()=>{const target=document.querySelector('#business-schedule .schedule-row[data-day="'+i+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.querySelector('.day-open').focus();}});const num=document.createElement('span');num.textContent=day.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});h.append(num);col.append(h);
-  const found=appointments.filter(a=>a.starts_at.slice(0,10)===key);
-  if(!found.length)col.append(empty('Sem atendimentos'));
-  found.forEach(a=>{
-   const ev=document.createElement('div');ev.className='event '+(a.status==='cancelled'?'cancelled':a.status==='completed'?'completed':'');
-   const title=document.createElement('b');title.textContent=a.starts_at.slice(11,16)+' · '+a.customer_name;
-   const detail=document.createElement('span');detail.textContent=a.service_name+' · '+(a.barber_name||'Sem profissional')+' · '+({scheduled:'Agendado',completed:'Concluído',cancelled:'Cancelado'}[a.status]||a.status);
-   ev.append(title,detail);
-   if(a.status==='scheduled'){
-    const done=action('Concluir','ghost',async()=>{try{await api('/admin/appointments/'+a.id+'/complete',{method:'POST'});await loadAgenda();}catch(e){showMessage('agenda-message',e.message,true);}});
-    const cancel=action('Cancelar','danger',async()=>{const reason=prompt('Motivo do cancelamento:');if(!reason)return;try{await api('/admin/appointments/'+a.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});await loadAgenda();}catch(e){showMessage('agenda-message',e.message,true);}});
-    const wrap=document.createElement('div');wrap.className='actions';wrap.append(done,cancel);ev.append(wrap);
-   }
-   col.append(ev);
-  });
-  root.append(col);
+function renderDailyCalendar(appointments,selectedDate,businessDays,staff){
+ const root=$('day-calendar');root.replaceChildren();
+ const selected= $('agenda-professional').value;
+ const visibleAppointments=selected?appointments.filter(a=>String(a.barber_id||'')===selected):appointments;
+ let lanes=staff.filter(x=>x.is_active&&(x.role==='barber'||x.can_serve));
+ if(selected)lanes=lanes.filter(x=>String(x.id)===selected);
+ const laneIds=new Set(lanes.map(x=>String(x.id)));
+ visibleAppointments.forEach(a=>{
+  if(a.barber_id&&!laneIds.has(String(a.barber_id))){
+   lanes.push({id:a.barber_id,name:a.barber_name||'Profissional',role:'barber',is_active:false});
+   laneIds.add(String(a.barber_id));
+  }
+ });
+ const hasUnassigned=!selected&&visibleAppointments.some(a=>!a.barber_id);
+ if(hasUnassigned)lanes.push({id:null,name:'Sem profissional',role:'unassigned'});
+ if(!lanes.length)lanes=[{id:0,name:'Equipe',role:'empty'}];
+ const dayData=businessDays.find(x=>x.weekday===dateWeekday(selectedDate));
+ let start=dayData&&dayData.is_open&&dayData.open_time?clockMinutes(dayData.open_time):8*60;
+ let end=dayData&&dayData.is_open&&dayData.close_time?clockMinutes(dayData.close_time):20*60;
+ visibleAppointments.forEach(a=>{
+  const aStart=clockMinutes(a.starts_at.slice(11,16));const aEnd=clockMinutes(a.ends_at.slice(11,16));
+  if(aStart!==null)start=Math.min(start,aStart);
+  if(aEnd!==null)end=Math.max(end,aEnd);
+ });
+ start=Math.max(0,Math.floor(start/60)*60);end=Math.min(24*60,Math.ceil(end/60)*60);
+ if(end<=start)end=Math.min(24*60,start+60);
+ const pxPerMinute=2;const hourHeight=60*pxPerMinute;const totalHeight=(end-start)*pxPerMinute;
+ const grid=document.createElement('div');grid.className='calendar-grid';grid.style.setProperty('--lane-count',String(lanes.length));grid.style.setProperty('--hour-height',hourHeight+'px');
+ const head=document.createElement('div');head.className='calendar-head-row';head.style.gridColumn='1 / -1';
+ const emptyHead=document.createElement('div');emptyHead.className='calendar-head-cell';emptyHead.textContent='HORÁRIO';head.append(emptyHead);
+ lanes.forEach(lane=>{const cell=document.createElement('div');cell.className='calendar-head-cell';cell.textContent=lane.name+(lane.is_active===false?' · inativo':'');head.append(cell);});
+ grid.append(head);
+ const body=document.createElement('div');body.className='calendar-body-row';body.style.gridColumn='1 / -1';
+ const axis=document.createElement('div');axis.className='calendar-time-axis';axis.style.height=totalHeight+'px';
+ for(let minute=start;minute<=end;minute+=60){
+  const label=document.createElement('div');label.className='calendar-time-label';label.style.top=((minute-start)*pxPerMinute)+'px';label.textContent=String(Math.floor(minute/60)).padStart(2,'0')+':00';axis.append(label);
  }
- showMessage('agenda-message',appointments.length+' agendamento(s) nesta semana.');
-}
-$('week-date').addEventListener('change',()=>loadAgenda().catch(e=>showMessage('agenda-message',e.message,true)));
-$('agenda-status').addEventListener('change',()=>loadAgenda().catch(e=>showMessage('agenda-message',e.message,true)));
-$('week-prev').addEventListener('click',()=>{$('week-date').value=shiftDate($('week-date').value,-7);loadAgenda().catch(e=>showMessage('agenda-message',e.message,true));});
-$('week-next').addEventListener('click',()=>{$('week-date').value=shiftDate($('week-date').value,7);loadAgenda().catch(e=>showMessage('agenda-message',e.message,true));});
-$('week-today').addEventListener('click',()=>{$('week-date').value=toLocalInputDate(new Date());loadAgenda().catch(e=>showMessage('agenda-message',e.message,true));});
-
-function renderBusinessSchedule(days){
- const root=$('business-schedule');root.replaceChildren();
- days.forEach(day=>{
-  const row=document.createElement('div');row.className='schedule-row';row.dataset.day=day.weekday;
-  const name=document.createElement('div');name.className='day-name';name.textContent=weekdays[day.weekday];
-  const check=document.createElement('label');check.className='check';const cb=document.createElement('input');cb.type='checkbox';cb.className='day-open';cb.checked=day.is_open;check.append(cb,document.createTextNode('Aberto'));
-  row.append(name,check);
-  [['open_time','Abertura'],['close_time','Fechamento'],['break_start','Início pausa'],['break_end','Fim pausa']].forEach(([field,label],i)=>{
-   const inp=document.createElement('input');inp.type='time';inp.className='time '+field;inp.value=day[field]||'';inp.setAttribute('aria-label',label+' '+weekdays[day.weekday]);if(i>1)inp.classList.add('optional');row.append(inp);
+ body.append(axis);
+ lanes.forEach(lane=>{
+  const col=document.createElement('div');col.className='calendar-lane';col.style.height=totalHeight+'px';
+  const laneAppointments=visibleAppointments.filter(a=>lane.id===null?!a.barber_id:String(a.barber_id)===String(lane.id));
+  if(!laneAppointments.length){const note=document.createElement('div');note.className='calendar-lane-empty';note.textContent='Sem atendimentos';col.append(note);}
+  laneAppointments.forEach(a=>{
+   const startAt=clockMinutes(a.starts_at.slice(11,16));const endAt=clockMinutes(a.ends_at.slice(11,16));
+   const duration=Math.max(5,endAt-startAt);const card=document.createElement('article');
+   card.className='calendar-appointment '+(a.status==='completed'?'completed':a.status==='cancelled'?'cancelled':'');
+   card.style.top=Math.max(0,(startAt-start)*pxPerMinute)+'px';card.style.height=Math.max(28,duration*pxPerMinute)+'px';
+   card.title=a.customer_name+' · '+a.service_name+' · '+a.starts_at.slice(11,16)+'–'+a.ends_at.slice(11,16);
+   const time=document.createElement('span');time.className='appt-time';time.textContent=a.starts_at.slice(11,16)+' – '+a.ends_at.slice(11,16);
+   const customer=document.createElement('strong');customer.textContent=a.customer_name;
+   card.append(time,customer);
+   const service=document.createElement('span');service.className='appt-service';service.textContent=a.service_name;card.append(service);
+   if(a.status==='scheduled'&&duration>=25){
+    const actions=document.createElement('div');actions.className='calendar-actions';
+    const done=document.createElement('button');done.textContent='Concluir';done.title='Concluir atendimento';
+    done.addEventListener('click',async()=>{try{await api('/admin/appointments/'+a.id+'/complete',{method:'POST'});await loadAgenda();}catch(e){showMessage('agenda-message',e.message,true);}});
+    const cancel=document.createElement('button');cancel.className='calendar-cancel';cancel.textContent='Cancelar';
+    cancel.addEventListener('click',async()=>{const reason=prompt('Motivo do cancelamento:');if(!reason)return;try{await api('/admin/appointments/'+a.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});await loadAgenda();}catch(e){showMessage('agenda-message',e.message,true);}});
+    actions.append(done,cancel);card.append(actions);
+   }
+   col.append(card);
   });
-  root.append(row);
+  body.append(col);
+ });
+ grid.append(body);root.append(grid);
+ const label=new Date(selectedDate+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+ const hoursNote=dayData&&dayData.is_open?'Expediente da barbearia: '+dayData.open_time+'–'+dayData.close_time: 'Barbearia marcada como fechada ou expediente ainda não configurado neste dia.';
+ showMessage('agenda-message',label+' · '+visibleAppointments.length+' atendimento(s). '+hoursNote);
+}
+$('agenda-date').addEventListener('change',()=>loadAgenda().catch(e=>showMessage('agenda-message',e.message,true)));
+$('agenda-status').addEventListener('change',()=>loadAgenda().catch(e=>showMessage('agenda-message',e.message,true)));
+$('agenda-professional').addEventListener('change',()=>renderDailyCalendar(lastAgendaAppointments,$('agenda-date').value,lastBusinessDays,cachedStaff));
+$('agenda-prev').addEventListener('click',()=>{$('agenda-date').value=shiftDate($('agenda-date').value,-1);loadAgenda().catch(e=>showMessage('agenda-message',e.message,true));});
+$('agenda-next').addEventListener('click',()=>{$('agenda-date').value=shiftDate($('agenda-date').value,1);loadAgenda().catch(e=>showMessage('agenda-message',e.message,true));});
+$('agenda-today').addEventListener('click',()=>{$('agenda-date').value=toLocalInputDate(new Date());loadAgenda().catch(e=>showMessage('agenda-message',e.message,true));});
+function renderHoursEditor(root,days,checkLabel){
+ root.replaceChildren();
+ days.forEach(day=>{
+  const row=document.createElement('div');row.className='hours-row';row.dataset.day=day.weekday;
+  const dayBox=document.createElement('div');dayBox.className='hours-day';
+  const name=document.createElement('div');name.className='hours-day-name';name.textContent=weekdays[day.weekday];
+  const check=document.createElement('label');check.className='hours-check';
+  const cb=document.createElement('input');cb.type='checkbox';cb.className='day-open';cb.checked=!!day.is_open;
+  check.append(cb,document.createTextNode(checkLabel));dayBox.append(name,check);
+  const config=document.createElement('div');config.className='hours-config';
+  const times=document.createElement('div');times.className='hours-times';
+  [['open_time','Entrada'],['close_time','Saída']].forEach(([field,label])=>{
+   const wrapper=document.createElement('div');wrapper.className='hours-field';
+   const caption=document.createElement('label');caption.textContent=label;
+   const input=document.createElement('input');input.type='time';input.className=field;input.value=day[field]||'';caption.append(input);wrapper.append(caption);times.append(wrapper);
+  });
+  const details=document.createElement('details');details.className='hours-break';
+  if(day.break_start||day.break_end)details.open=true;
+  const summary=document.createElement('summary');summary.textContent='Adicionar intervalo (opcional)';
+  const breakFields=document.createElement('div');breakFields.className='hours-break-fields';
+  [['break_start','Início do intervalo'],['break_end','Fim do intervalo']].forEach(([field,label])=>{
+   const wrapper=document.createElement('div');wrapper.className='hours-field';
+   const caption=document.createElement('label');caption.textContent=label;
+   const input=document.createElement('input');input.type='time';input.className=field;input.value=day[field]||'';caption.append(input);wrapper.append(caption);breakFields.append(wrapper);
+  });
+  details.append(summary,breakFields);config.append(times,details);row.append(dayBox,config);
+  const sync=()=>{row.classList.toggle('is-closed',!cb.checked);row.querySelectorAll('input[type="time"]').forEach(input=>input.disabled=!cb.checked);};
+  cb.addEventListener('change',sync);sync();root.append(row);
  });
 }
+function readHoursEditor(root){
+ return [...root.querySelectorAll('.hours-row')].map(row=>{
+  const isOpen=row.querySelector('.day-open').checked;
+  return {
+   weekday:Number(row.dataset.day),is_open:isOpen,
+   open_time:isOpen?(row.querySelector('.open_time').value||null):null,
+   close_time:isOpen?(row.querySelector('.close_time').value||null):null,
+   break_start:isOpen?(row.querySelector('.break_start').value||null):null,
+   break_end:isOpen?(row.querySelector('.break_end').value||null):null
+  };
+ });
+}
+function renderBusinessSchedule(days){renderHoursEditor($('business-schedule'),days,'Aberto');}
 $('save-business-schedule').addEventListener('click',async()=>{
- const days=[...$('business-schedule').children].map(row=>({weekday:Number(row.dataset.day),is_open:row.querySelector('.day-open').checked,open_time:row.querySelector('.open_time').value||null,close_time:row.querySelector('.close_time').value||null,break_start:row.querySelector('.break_start').value||null,break_end:row.querySelector('.break_end').value||null}));
- try{await api('/admin/schedule',{method:'PUT',body:JSON.stringify({days})});showMessage('schedule-message','Expediente salvo.');}
+ const days=readHoursEditor($('business-schedule'));
+ try{await api('/admin/schedule',{method:'PUT',body:JSON.stringify({days})});showMessage('schedule-message','Funcionamento da barbearia salvo.');await loadAgenda();}
  catch(e){showMessage('schedule-message',e.message,true);}
 });
 function populateBlockStaff(){
@@ -367,7 +499,7 @@ async function loadTeam(){
  data.barbers.forEach(s=>{
   const label=s.role==='owner'?'Proprietário':'Colaborador';
   const buttons=[
-   action('Horários','secondary',()=>openStaffSchedule(s)),
+   action('Expediente','secondary',()=>openStaffSchedule(s)),
   ];
   if(s.role==='barber'){
    buttons.push(action('Editar','secondary',async()=>{const name=prompt('Nome do profissional:',s.name);if(name===null)return;const pin=prompt('Novo PIN de 4 números (deixe vazio para manter):','');if(pin===null)return;try{await api('/admin/barbers/'+s.id,{method:'PATCH',body:JSON.stringify({name,pin})});await loadTeam();}catch(e){showMessage('barber-message',e.message,true);}}));
@@ -386,27 +518,37 @@ $('save-owner-provider').addEventListener('click',async()=>{
  catch(e){showMessage('owner-provider-message',e.message,true);}
 });
 async function openStaffSchedule(staff){
- currentStaffId=staff.id;currentStaffName=staff.name;$('staff-schedule-title').textContent='Horários de '+staff.name;$('staff-schedule-panel').classList.remove('hidden');
- try{const data=await api('/admin/staff/'+staff.id+'/schedule');renderStaffSchedule(data.days);showMessage('staff-schedule-message',data.uses_business_hours_when_unset?'Este profissional está usando o expediente geral.':'Horários individuais carregados.');}
- catch(e){showMessage('staff-schedule-message',e.message,true);}
+ currentStaffId=staff.id;currentStaffName=staff.name;
+ $('staff-schedule-title').textContent='Expediente de '+staff.name;
+ $('staff-schedule-panel').classList.remove('hidden');
+ try{
+  const [data,business]=await Promise.all([
+   api('/admin/staff/'+staff.id+'/schedule'),api('/admin/schedule')
+  ]);
+  const inherited=data.uses_business_hours_when_unset;
+  renderStaffSchedule(inherited?business.days:data.days);
+  $('reset-staff-schedule').classList.toggle('hidden',inherited);
+  showMessage('staff-schedule-message',inherited?'Este profissional acompanha automaticamente o funcionamento da barbearia.':'Expediente individual configurado para este profissional.');
+ }catch(e){showMessage('staff-schedule-message',e.message,true);}
  $('staff-schedule-panel').scrollIntoView({behavior:'smooth'});
 }
-function renderStaffSchedule(days){
- const root=$('staff-schedule-form');root.replaceChildren();
- days.forEach(day=>{
-  const row=document.createElement('div');row.className='schedule-row';row.dataset.day=day.weekday;
-  const name=document.createElement('div');name.className='day-name';name.textContent=weekdays[day.weekday];
-  const check=document.createElement('label');check.className='check';const cb=document.createElement('input');cb.type='checkbox';cb.className='day-open';cb.checked=day.is_open;check.append(cb,document.createTextNode('Atende'));
-  row.append(name,check);
-  [['open_time','Abertura'],['close_time','Fechamento'],['break_start','Início pausa'],['break_end','Fim pausa']].forEach(([field,label],i)=>{const input=document.createElement('input');input.type='time';input.className=field;input.value=day[field]||'';input.setAttribute('aria-label',label);if(i>1)input.classList.add('optional');row.append(input);});
-  root.append(row);
- });
-}
+function renderStaffSchedule(days){renderHoursEditor($('staff-schedule-form'),days,'Atende');}
 $('save-staff-schedule').addEventListener('click',async()=>{
  if(!currentStaffId)return;
- const days=[...$('staff-schedule-form').children].map(row=>({weekday:Number(row.dataset.day),is_open:row.querySelector('.day-open').checked,open_time:row.querySelector('.open_time').value||null,close_time:row.querySelector('.close_time').value||null,break_start:row.querySelector('.break_start').value||null,break_end:row.querySelector('.break_end').value||null}));
- try{await api('/admin/staff/'+currentStaffId+'/schedule',{method:'PUT',body:JSON.stringify({days})});showMessage('staff-schedule-message','Horários de '+currentStaffName+' atualizados.');}
- catch(e){showMessage('staff-schedule-message',e.message,true);}
+ const days=readHoursEditor($('staff-schedule-form'));
+ try{
+  await api('/admin/staff/'+currentStaffId+'/schedule',{method:'PUT',body:JSON.stringify({days})});
+  $('reset-staff-schedule').classList.remove('hidden');
+  showMessage('staff-schedule-message','Expediente de '+currentStaffName+' atualizado.');
+ }catch(e){showMessage('staff-schedule-message',e.message,true);}
+});
+$('reset-staff-schedule').addEventListener('click',async()=>{
+ if(!currentStaffId)return;
+ try{
+  await api('/admin/staff/'+currentStaffId+'/schedule',{method:'DELETE'});
+  $('reset-staff-schedule').classList.add('hidden');
+  await openStaffSchedule({id:currentStaffId,name:currentStaffName});
+ }catch(e){showMessage('staff-schedule-message',e.message,true);}
 });
 $('close-staff-schedule').addEventListener('click',()=>$('staff-schedule-panel').classList.add('hidden'));
 
