@@ -8,7 +8,7 @@ test("normaliza telefone mantendo apenas dígitos", () => {
 });
 
 test("mascara nomes para exibição de cadastro existente", () => {
-  assert.equal(maskCustomerName("Lucas Rafael"), "Lu***** Ra****");
+  assert.equal(maskCustomerName("Lucas Rafael"), "Lu*** Ra****");
   assert.equal(maskCustomerName("Jo"), "J*");
 });
 
