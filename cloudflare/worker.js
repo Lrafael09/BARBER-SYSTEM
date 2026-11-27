@@ -60,9 +60,9 @@ async function api(request, env, url) {
   }
   if(url.pathname==="/api/auth/register"&&request.method==="POST"){
    const d=await request.json().catch(()=>null); if(!d)return json({error:"Envie os dados em JSON."},400);
-   const shop=String(d.shop_name||"").trim(),name=String(d.owner_name||"").trim(),email=String(d.email||"").trim().toLowerCase(),pass=d.password,wa=String(d.whatsapp||"").replace(/\\D/g,"");
+   const shop=String(d.shop_name||"").trim(),name=String(d.owner_name||"").trim(),email=String(d.email||"").trim().toLowerCase(),pass=d.password,wa=String(d.whatsapp||"").replace(/\D/g,"");
    if(!shop||!name||!email||!pass||!wa)return json({error:"Preencha todos os campos, inclusive o WhatsApp."},400);
-   if(shop.length>120||name.length>120||!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)||wa.length<10||wa.length>13)return json({error:"Confira o nome, e-mail e WhatsApp informado."},400);
+   if(shop.length>120||name.length>120||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||wa.length<10||wa.length>13)return json({error:"Confira o nome, e-mail e WhatsApp informado."},400);
    if(typeof pass!=="string"||pass.length<8)return json({error:"A senha deve ter pelo menos 8 caracteres."},400);
    if(env.OWNER_REGISTRATION_ENABLED!=="true")return json({error:"Novos cadastros estão temporariamente desativados."},403);
    const emailUsed=await env.DB.prepare("SELECT id FROM users WHERE lower(email)=? AND role='owner' LIMIT 1").bind(email).first();
@@ -73,7 +73,7 @@ async function api(request, env, url) {
    if(shopCount.n===1&&userCount.n===0)legacy=await env.DB.prepare("SELECT id FROM barbershops ORDER BY id LIMIT 1").first();
    const phoneUsed=await env.DB.prepare("SELECT id FROM barbershops WHERE whatsapp=? AND id<>? LIMIT 1").bind(wa,legacy?.id||0).first();
    if(phoneUsed)return json({error:"Este WhatsApp já está vinculado a uma barbearia. Use outro número."},409);
-   const base=shop.normalize("NFKD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+   const base=shop.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
    if(!base)return json({error:"Nome inválido para endereço."},400);
    let slug=base,i=2;
    while(await env.DB.prepare("SELECT id FROM barbershops WHERE slug=? AND id<>?").bind(slug,legacy?.id||0).first())slug=base+"-"+i++;
