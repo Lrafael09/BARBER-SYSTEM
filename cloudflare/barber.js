@@ -275,6 +275,50 @@ export async function handleBarberApi(request, env, url) {
     });
   }
 
+  if (url.pathname === "/api/barber/attendance" && request.method === "GET") {
+    const today = saoPauloDateTime().date;
+    const attendance = await env.DB.prepare(
+      "SELECT attendance_date,arrived_at,departed_at FROM staff_attendance WHERE barbershop_id=? AND user_id=? AND attendance_date=?"
+    ).bind(session.barbershop_id, session.user_id, today).first();
+    return json({ attendance: attendance || { attendance_date: today, arrived_at: null, departed_at: null } });
+  }
+
+  if (url.pathname === "/api/barber/attendance/arrival" && request.method === "POST") {
+    const now = saoPauloDateTime();
+    const stamp = now.date + "T" + now.time + ":00";
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO staff_attendance(barbershop_id,user_id,attendance_date) VALUES(?,?,?)"
+    ).bind(session.barbershop_id, session.user_id, now.date).run();
+    const current = await env.DB.prepare(
+      "SELECT arrived_at,departed_at FROM staff_attendance WHERE barbershop_id=? AND user_id=? AND attendance_date=?"
+    ).bind(session.barbershop_id, session.user_id, now.date).first();
+    if (current?.arrived_at) return json({ error: "Sua chegada já foi registrada às " + current.arrived_at.slice(11,16) + "." }, 409);
+    await env.DB.prepare(
+      "UPDATE staff_attendance SET arrived_at=? WHERE barbershop_id=? AND user_id=? AND attendance_date=? AND arrived_at IS NULL AND departed_at IS NULL"
+    ).bind(stamp, session.barbershop_id, session.user_id, now.date).run();
+    const attendance = await env.DB.prepare(
+      "SELECT attendance_date,arrived_at,departed_at FROM staff_attendance WHERE barbershop_id=? AND user_id=? AND attendance_date=?"
+    ).bind(session.barbershop_id, session.user_id, now.date).first();
+    return json({ message: "Chegada registrada às " + attendance.arrived_at.slice(11,16) + ".", attendance });
+  }
+
+  if (url.pathname === "/api/barber/attendance/departure" && request.method === "POST") {
+    const now = saoPauloDateTime();
+    const stamp = now.date + "T" + now.time + ":00";
+    const current = await env.DB.prepare(
+      "SELECT arrived_at,departed_at FROM staff_attendance WHERE barbershop_id=? AND user_id=? AND attendance_date=?"
+    ).bind(session.barbershop_id, session.user_id, now.date).first();
+    if (!current?.arrived_at) return json({ error: "Registre sua chegada antes de registrar a saída." }, 409);
+    if (current.departed_at) return json({ error: "Sua saída já foi registrada às " + current.departed_at.slice(11,16) + "." }, 409);
+    await env.DB.prepare(
+      "UPDATE staff_attendance SET departed_at=? WHERE barbershop_id=? AND user_id=? AND attendance_date=? AND arrived_at IS NOT NULL AND departed_at IS NULL"
+    ).bind(stamp, session.barbershop_id, session.user_id, now.date).run();
+    const attendance = await env.DB.prepare(
+      "SELECT attendance_date,arrived_at,departed_at FROM staff_attendance WHERE barbershop_id=? AND user_id=? AND attendance_date=?"
+    ).bind(session.barbershop_id, session.user_id, now.date).first();
+    return json({ message: "Saída registrada às " + attendance.departed_at.slice(11,16) + ".", attendance });
+  }
+
   if (url.pathname === "/api/barber/appointments" && request.method === "GET") {
     const date = url.searchParams.get("date");
     const from = url.searchParams.get("from");
