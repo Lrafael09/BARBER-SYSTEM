@@ -300,7 +300,7 @@ function populateAgendaStaff(staff){
  select.replaceChildren(new Option('Todas as agendas',''));
 
  const owner=staff.find(x=>x.role==='owner');
- if(owner&&owner.is_active&&owner.can_serve){
+ if(owner&&owner.is_active){
   const group=document.createElement('optgroup');group.label='Proprietário';
   group.append(new Option(owner.name+' · Dono',String(owner.id)));
   select.append(group);
@@ -331,7 +331,7 @@ function renderDailyCalendar(appointments,selectedDate,businessDays,staff){
  const root=$('day-calendar');root.replaceChildren();
  const selected= $('agenda-professional').value;
  const visibleAppointments=selected?appointments.filter(a=>String(a.barber_id||'')===selected):appointments;
- let lanes=staff.filter(x=>x.is_active&&(x.role==='barber'||x.can_serve));
+ let lanes=staff.filter(x=>x.is_active&&(x.role==='owner'||x.role==='barber'));
  if(selected)lanes=lanes.filter(x=>String(x.id)===selected);
  const laneIds=new Set(lanes.map(x=>String(x.id)));
  visibleAppointments.forEach(a=>{
@@ -379,15 +379,6 @@ function renderDailyCalendar(appointments,selectedDate,businessDays,staff){
    const customer=document.createElement('strong');customer.textContent=a.customer_name;
    card.append(time,customer);
    const service=document.createElement('span');service.className='appt-service';service.textContent=a.service_name;card.append(service);
-   if(a.status==='scheduled'&&duration>=25){
-    const actions=document.createElement('div');actions.className='calendar-actions';
-    const done=document.createElement('button');done.textContent='Concluir';done.title='Concluir atendimento';
-    done.addEventListener('click',async()=>{try{await api('/admin/appointments/'+a.id+'/complete',{method:'POST'});await loadAgenda();}catch(e){showMessage('agenda-message',e.message,true);}});
-    const cancel=document.createElement('button');cancel.className='calendar-cancel';cancel.textContent='Cancelar';
-    cancel.addEventListener('click',async()=>{const reason=prompt('Motivo do cancelamento:');if(!reason)return;try{await api('/admin/appointments/'+a.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});await loadAgenda();}catch(e){showMessage('agenda-message',e.message,true);}});
-    actions.append(done,cancel);card.append(actions);
-   }
-   col.append(card);
   });
   body.append(col);
  });
