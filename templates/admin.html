@@ -146,8 +146,8 @@
     <section class="view" id="view-team">
       <div class="section-head"><h1>Profissionais</h1><p class="muted">Cadastre os colaboradores. Eles entram pelo link único usando o nome e o PIN que você definir.</p></div>
       <div class="two-col">
-        <section class="panel"><h2>Novo colaborador</h2><label for="barber-name">Nome do profissional</label><input id="barber-name" maxlength="120"><label for="barber-pin">PIN de acesso (4 números)</label><input id="barber-pin" inputmode="numeric" maxlength="4" type="password"><button id="add-barber">Cadastrar profissional</button><div id="barber-message" class="message"></div></section>
-        <section class="panel"><h2>O proprietário também atende?</h2><p class="muted">Ative esta opção para aparecer na página pública como profissional. O PIN será diferente da senha do painel.</p><label class="toggle"><input type="checkbox" id="owner-can-serve"> Quero receber agendamentos como profissional</label><label for="owner-pin">PIN do proprietário (4 números)</label><input id="owner-pin" inputmode="numeric" maxlength="4" type="password"><button id="save-owner-provider">Salvar disponibilidade</button><div id="owner-provider-message" class="message"></div></section>
+        <section class="panel"><h2>Novo colaborador</h2><label for="barber-name">Nome do profissional</label><input id="barber-name" maxlength="120"><label for="barber-pin">PIN de acesso (4 números)</label><input id="barber-pin" inputmode="numeric" maxlength="4" type="password"><label for="barber-commission">Comissão do profissional (%)</label><input id="barber-commission" type="number" min="0" max="100" step="0.01" value="0"><button id="add-barber">Cadastrar profissional</button><div id="barber-message" class="message"></div></section>
+        <section class="panel"><h2>O proprietário também atende?</h2><p class="muted">Ative esta opção para aparecer na página pública como profissional. O PIN será diferente da senha do painel.</p><label class="toggle"><input type="checkbox" id="owner-can-serve"> Quero receber agendamentos como profissional</label><label for="owner-pin">PIN do proprietário (4 números)</label><input id="owner-pin" inputmode="numeric" maxlength="4" type="password"><label for="owner-commission">Sua comissão (%)</label><input id="owner-commission" type="number" min="0" max="100" step="0.01" value="0"><button id="save-owner-provider">Salvar disponibilidade</button><div id="owner-provider-message" class="message"></div></section>
       </div>
       <section class="panel" style="margin-top:14px"><div class="row"><h2>Equipe cadastrada</h2><button class="ghost" id="refresh-team">Atualizar</button></div><div id="team-list" class="list"></div></section>
       <section class="panel hidden" id="staff-schedule-panel" style="margin-top:14px"><div class="row"><div><h2 id="staff-schedule-title">Expediente do profissional</h2><p class="muted">Defina os dias e os horários em que atende. Por padrão, o profissional acompanha o funcionamento da barbearia.</p></div><div class="actions"><button class="secondary hidden" id="reset-staff-schedule">Usar horário da barbearia</button><button class="ghost" id="close-staff-schedule">Fechar</button></div></div><div id="staff-schedule-form" class="hours-list"></div><button id="save-staff-schedule">Salvar expediente</button><div id="staff-schedule-message" class="message"></div></section>
@@ -495,6 +495,7 @@ async function loadTeam(){
  const root=$('team-list');root.replaceChildren();
  const owner=data.barbers.find(x=>x.role==='owner');
  $('owner-can-serve').checked=!!owner?.can_serve;
+ $('owner-commission').value=Number(owner?.commission_percent||0).toFixed(2).replace(/\.00$/,'');
  if(!data.barbers.length){root.append(empty('Nenhum profissional cadastrado.'));return;}
  data.barbers.forEach(s=>{
   const label=s.role==='owner'?'Proprietário':'Colaborador';
@@ -502,19 +503,19 @@ async function loadTeam(){
    action('Expediente','secondary',()=>openStaffSchedule(s)),
   ];
   if(s.role==='barber'){
-   buttons.push(action('Editar','secondary',async()=>{const name=prompt('Nome do profissional:',s.name);if(name===null)return;const pin=prompt('Novo PIN de 4 números (deixe vazio para manter):','');if(pin===null)return;try{await api('/admin/barbers/'+s.id,{method:'PATCH',body:JSON.stringify({name,pin})});await loadTeam();}catch(e){showMessage('barber-message',e.message,true);}}));
+   buttons.push(action('Editar','secondary',async()=>{const name=prompt('Nome do profissional:',s.name);if(name===null)return;const pin=prompt('Novo PIN de 4 números (deixe vazio para manter):','');if(pin===null)return;const commission=prompt('Comissão do profissional em porcentagem:',String(s.commission_percent||0));if(commission===null)return;try{await api('/admin/barbers/'+s.id,{method:'PATCH',body:JSON.stringify({name,pin,commission_percent:commission})});await loadTeam();}catch(e){showMessage('barber-message',e.message,true);}}));
    buttons.push(action(s.is_active?'Desativar':'Ativar',s.is_active?'danger':'secondary',async()=>{try{if(s.is_active)await api('/admin/barbers/'+s.id,{method:'DELETE'});else await api('/admin/barbers/'+s.id,{method:'PATCH',body:JSON.stringify({is_active:true})});await loadTeam();}catch(e){showMessage('barber-message',e.message,true);}}));
   }
-  root.append(row(s.name,label+' · '+(s.can_serve?'Recebe agendamentos':'Não recebe agendamentos')+' · '+(s.is_active?'Ativo':'Inativo'),buttons));
+  root.append(row(s.name,label+' · Comissão '+Number(s.commission_percent||0).toLocaleString('pt-BR')+'% · '+(s.can_serve?'Recebe agendamentos':'Não recebe agendamentos')+' · '+(s.is_active?'Ativo':'Inativo'),buttons));
  });
 }
 $('add-barber').addEventListener('click',async()=>{
- try{await api('/admin/barbers',{method:'POST',body:JSON.stringify({name:$('barber-name').value,pin:$('barber-pin').value})});$('barber-name').value='';$('barber-pin').value='';showMessage('barber-message','Profissional cadastrado. Compartilhe o link da área do colaborador.');await loadTeam();}
+ try{await api('/admin/barbers',{method:'POST',body:JSON.stringify({name:$('barber-name').value,pin:$('barber-pin').value,commission_percent:$('barber-commission').value||0})});$('barber-name').value='';$('barber-pin').value='';$('barber-commission').value='0';showMessage('barber-message','Profissional cadastrado. Compartilhe o link da área do colaborador.');await loadTeam();}
  catch(e){showMessage('barber-message',e.message,true);}
 });
 $('refresh-team').addEventListener('click',()=>loadTeam().catch(e=>showMessage('barber-message',e.message,true)));
 $('save-owner-provider').addEventListener('click',async()=>{
- try{await api('/admin/staff/owner',{method:'PATCH',body:JSON.stringify({can_serve:$('owner-can-serve').checked,pin:$('owner-pin').value})});$('owner-pin').value='';showMessage('owner-provider-message','Preferência salva.');await loadTeam();}
+ try{await api('/admin/staff/owner',{method:'PATCH',body:JSON.stringify({can_serve:$('owner-can-serve').checked,pin:$('owner-pin').value,commission_percent:$('owner-commission').value||0})});$('owner-pin').value='';showMessage('owner-provider-message','Preferência salva.');await loadTeam();}
  catch(e){showMessage('owner-provider-message',e.message,true);}
 });
 async function openStaffSchedule(staff){
