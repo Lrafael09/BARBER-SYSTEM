@@ -1,11 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { webcrypto } from "node:crypto";
 import scryptJs from "scrypt-js";
 const { scrypt } = scryptJs;
 import { hashPassword, verifyPassword, needsPasswordRehash } from "../cloudflare/passwords.js";
 
-globalThis.crypto = webcrypto;
 
 const encoder = new TextEncoder();
 const hex = bytes => Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
