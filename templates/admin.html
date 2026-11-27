@@ -113,7 +113,7 @@
         <div class="row agenda-toolbar">
           <div class="week-controls"><button class="ghost" id="agenda-prev" aria-label="Dia anterior">‹</button><input type="date" id="agenda-date"><button class="ghost" id="agenda-next" aria-label="Próximo dia">›</button><button class="secondary" id="agenda-today">Hoje</button></div>
           <div class="agenda-filters">
-            <select id="agenda-professional" aria-label="Filtrar profissional"><option value="">Todos os profissionais</option></select>
+            <select id="agenda-professional" aria-label="Selecionar agenda"><option value="">Todas as agendas</option></select>
             <select id="agenda-status" aria-label="Filtrar status"><option value="">Todos os status</option><option value="scheduled">Agendados</option><option value="completed">Concluídos</option><option value="cancelled">Cancelados</option></select>
           </div>
         </div>
@@ -147,7 +147,7 @@
       <div class="section-head"><h1>Profissionais</h1><p class="muted">Cadastre os colaboradores. Eles entram pelo link único usando o nome e o PIN que você definir.</p></div>
       <div class="two-col">
         <section class="panel"><h2>Novo colaborador</h2><label for="barber-name">Nome do profissional</label><input id="barber-name" maxlength="120"><label for="barber-pin">PIN de acesso (4 números)</label><input id="barber-pin" inputmode="numeric" maxlength="4" type="password"><label for="barber-commission">Comissão do profissional (%)</label><input id="barber-commission" type="number" min="0" max="100" step="0.01" value="0"><button id="add-barber">Cadastrar profissional</button><div id="barber-message" class="message"></div></section>
-        <section class="panel"><h2>O proprietário também atende?</h2><p class="muted">Ative esta opção para aparecer na página pública como profissional. O PIN será diferente da senha do painel.</p><label class="toggle"><input type="checkbox" id="owner-can-serve"> Quero receber agendamentos como profissional</label><label for="owner-pin">PIN do proprietário (4 números)</label><input id="owner-pin" inputmode="numeric" maxlength="4" type="password"><label for="owner-commission">Sua comissão (%)</label><input id="owner-commission" type="number" min="0" max="100" step="0.01" value="0"><button id="save-owner-provider">Salvar disponibilidade</button><div id="owner-provider-message" class="message"></div></section>
+        <section class="panel"><h2>O dono também corta cabelo?</h2><p class="muted">Ative esta opção para criar uma agenda própria para o dono e permitir que clientes marquem com ele. Desativada, aparecem somente as agendas dos colaboradores.</p><label class="toggle"><input type="checkbox" id="owner-can-serve"> Sim, o dono atende clientes e terá uma agenda própria</label><label for="owner-pin">PIN do proprietário (4 números)</label><input id="owner-pin" inputmode="numeric" maxlength="4" type="password"><label for="owner-commission">Sua comissão (%)</label><input id="owner-commission" type="number" min="0" max="100" step="0.01" value="0"><button id="save-owner-provider">Salvar configuração do dono</button><div id="owner-provider-message" class="message"></div></section>
       </div>
       <section class="panel" style="margin-top:14px"><div class="row"><h2>Equipe cadastrada</h2><button class="ghost" id="refresh-team">Atualizar</button></div><div id="team-list" class="list"></div></section>
       <section class="panel hidden" id="staff-schedule-panel" style="margin-top:14px"><div class="row"><div><h2 id="staff-schedule-title">Expediente do profissional</h2><p class="muted">Defina os dias e os horários em que atende. Por padrão, o profissional acompanha o funcionamento da barbearia.</p></div><div class="actions"><button class="secondary hidden" id="reset-staff-schedule">Usar horário da barbearia</button><button class="ghost" id="close-staff-schedule">Fechar</button></div></div><div id="staff-schedule-form" class="hours-list"></div><button id="save-staff-schedule">Salvar expediente</button><div id="staff-schedule-message" class="message"></div></section>
@@ -297,10 +297,22 @@ function dateWeekday(value){return (new Date(value+'T12:00:00').getDay()+6)%7;}
 function clockMinutes(value){if(!value)return null;const parts=value.split(':').map(Number);return parts[0]*60+parts[1];}
 function populateAgendaStaff(staff){
  const select=$('agenda-professional');const old=select.value;
- select.replaceChildren(new Option('Todos os profissionais',''));
- staff.filter(x=>x.is_active&&(x.role==='barber'||x.can_serve)).forEach(x=>{
-  select.add(new Option(x.name+(x.role==='owner'?' · Você':''),String(x.id)));
- });
+ select.replaceChildren(new Option('Todas as agendas',''));
+
+ const owner=staff.find(x=>x.role==='owner');
+ if(owner&&owner.is_active&&owner.can_serve){
+  const group=document.createElement('optgroup');group.label='Proprietário';
+  group.append(new Option(owner.name+' · Dono',String(owner.id)));
+  select.append(group);
+ }
+
+ const team=staff.filter(x=>x.is_active&&x.role==='barber');
+ if(team.length){
+  const group=document.createElement('optgroup');group.label='Colaboradores';
+  team.forEach(x=>group.append(new Option(x.name,String(x.id))));
+  select.append(group);
+ }
+
  if([...select.options].some(o=>o.value===old))select.value=old;
 }
 async function loadAgenda(){
@@ -515,7 +527,7 @@ $('add-barber').addEventListener('click',async()=>{
 });
 $('refresh-team').addEventListener('click',()=>loadTeam().catch(e=>showMessage('barber-message',e.message,true)));
 $('save-owner-provider').addEventListener('click',async()=>{
- try{await api('/admin/staff/owner',{method:'PATCH',body:JSON.stringify({can_serve:$('owner-can-serve').checked,pin:$('owner-pin').value,commission_percent:$('owner-commission').value||0})});$('owner-pin').value='';showMessage('owner-provider-message','Preferência salva.');await loadTeam();}
+ try{await api('/admin/staff/owner',{method:'PATCH',body:JSON.stringify({can_serve:$('owner-can-serve').checked,pin:$('owner-pin').value,commission_percent:$('owner-commission').value||0})});$('owner-pin').value='';showMessage('owner-provider-message',$('owner-can-serve').checked?'Agenda própria do dono ativada.':'Agenda do dono desativada; a equipe continua aparecendo.');await loadTeam();}
  catch(e){showMessage('owner-provider-message',e.message,true);}
 });
 async function openStaffSchedule(staff){
