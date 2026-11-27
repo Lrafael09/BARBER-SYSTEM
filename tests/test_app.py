@@ -228,7 +228,7 @@ class BarberSystemTests(unittest.TestCase):
         self.assertIn("daily", summary["goal_achieved"])
 
     def test_staff_booking_lunch_and_commission_flow(self):
-        self.register_and_login_owner()
+        slug = self.register_and_login_owner()
         service_id = self.create_service()
         self.create_schedule()
 
@@ -273,6 +273,12 @@ class BarberSystemTests(unittest.TestCase):
         self.assertNotIn("12:00", slots)  # intervalo geral da barbearia
         self.assertNotIn("13:00", slots)  # almoço individual do profissional
         self.assertIn("14:00", slots)
+
+        public_availability = self.client.get(
+            f"/b/{slug}/availability?service_id={service_id}&barber_id={staff_id}&date={today.isoformat()}"
+        )
+        self.assertEqual(public_availability.status_code, 200, public_availability.get_json())
+        self.assertNotIn("13:00", public_availability.get_json()["slots"])
 
         booking = self.client.post("/barber/appointments", json={
             "customer_name": "Cliente Balcão",
