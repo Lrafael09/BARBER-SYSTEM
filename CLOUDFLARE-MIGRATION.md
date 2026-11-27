@@ -10,7 +10,7 @@ This branch is the isolated Cloudflare migration. The original Flask application
 - Professional agenda, commissions and service completion are in `cloudflare/barber.js`.
 - Owner financial settings, daily goals and cashbook APIs are in `cloudflare/admin.js`.
 - D1 binding is configured in `wrangler.toml`.
-- Static assets will be served from `public/`.
+- Static assets are served from `public/`; the admin, professional and booking pages now have Cloudflare-ready static copies.
 
 ## Authentication migration
 - Owner registration and email/password login remain available through `/api/auth/*`.
@@ -64,8 +64,27 @@ Owner-only endpoints:
 
 The summary keeps the existing business rule: monthly revenue target equals fixed costs plus desired profit; the daily target divides that amount by the number of open days in the month; the weekly target adds the daily targets for the open days in that week. Completed appointments are reconciled into the cashbook without duplicating entries.
 
+## Administrator operations
+Additional owner-only endpoints now cover:
+- `GET /api/admin/dashboard` and `GET /api/admin/appointments`.
+- Appointment cancellation, professional reassignment and completion.
+- Weekly business schedule and general/individual time blocks.
+- Service catalog management.
+- Professional team, PIN, commission and owner-provider settings.
+- Individual professional schedules.
+- Customer and product lists/management.
+- Barbershop identity, theme, WhatsApp and logo settings.
+
+## Static routes
+- `/admin/panel` serves the static owner panel.
+- `/barber/:slug` serves the professional area.
+- `/b/:slug/book` serves the public booking page.
+- `/` redirects to `/admin/panel`.
+
+The static pages are copies under `public/`; the original Flask templates remain in place on this branch as reference. The static pages use the Cloudflare API routes above.
+
 ## Remaining migration
-Owner dashboard, staff and service management, shop settings, admin appointment management and the HTML interfaces still need to be migrated and tested before this branch can replace the existing application.
+The static pages and APIs still need end-to-end browser testing against a D1 database. The D1 migrations must be applied to the intended Cloudflare database before a live test. The production domain, secrets, registration policy and final cutover must be checked before this branch replaces the original application.
 
 ## Local development
 1. Install Node.js LTS.
