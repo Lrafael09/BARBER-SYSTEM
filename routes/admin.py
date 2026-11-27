@@ -70,6 +70,17 @@ def parse_price_cents(value):
         raise ValueError("Informe um preço válido em reais.")
 
 
+def parse_commission_percent(value):
+    """Valida uma porcentagem de comissão entre zero e cem."""
+    try:
+        amount = Decimal(str(value).strip().replace(",", "."))
+        if not amount.is_finite() or amount < 0 or amount > 100:
+            raise ValueError
+        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError, TypeError, AttributeError):
+        raise ValueError("A comissão deve ser uma porcentagem entre 0 e 100.")
+
+
 def validate_service_data(data, partial=False, existing=None):
     """Valida e normaliza os dados recebidos para um serviço."""
 
@@ -140,6 +151,10 @@ def create_barber():
 
     name = str(data.get("name", "")).strip()
     pin = data.get("pin", "")
+    try:
+        commission_percent = parse_commission_percent(data.get("commission_percent", 0))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
     if not name or len(name) > 120:
         return jsonify({
@@ -155,14 +170,15 @@ def create_barber():
     cursor = db.execute(
         """
         INSERT INTO users (
-            barbershop_id, name, pin_hash, role, is_active, can_serve
+            barbershop_id, name, pin_hash, role, is_active, can_serve, commission_percent
         )
-        VALUES (?, ?, ?, 'barber', 1, 1)
+        VALUES (?, ?, ?, 'barber', 1, 1, ?)
         """,
         (
             session["barbershop_id"],
             name,
-            generate_password_hash(pin)
+            generate_password_hash(pin),
+            float(commission_percent)
         )
     )
     db.commit()
@@ -172,7 +188,8 @@ def create_barber():
         "barber": {
             "id": cursor.lastrowid,
             "name": name,
-            "role": "barber"
+            "role": "barber",
+            "commission_percent": float(commission_percent)
         }
     }), 201
 
@@ -1003,7 +1020,7 @@ def _staff_record(user_id, barbershop_id):
 def list_barbers():
     rows = get_db().execute(
         """
-        SELECT id, name, role, is_active, can_serve
+        SELECT id, name, role, is_active, can_serve, commission_percent
         FROM users
         WHERE barbershop_id = ? AND role = 'barber'
         ORDER BY is_active DESC, name COLLATE NOCASE
@@ -1012,7 +1029,7 @@ def list_barbers():
     ).fetchall()
     owner = get_db().execute(
         """
-        SELECT id, name, role, is_active, can_serve
+        SELECT id, name, role, is_active, can_serve, commission_percent
         FROM users
         WHERE barbershop_id = ? AND role = 'owner'
         LIMIT 1
@@ -1033,7 +1050,7 @@ def update_barber(barber_id):
         return jsonify({"error": "Envie os dados que deseja atualizar."}), 400
     db = get_db()
     barber = db.execute(
-        "SELECT id, name, is_active FROM users WHERE id = ? AND barbershop_id = ? AND role = 'barber'",
+        "SELECT id, name, is_active, commission_percent FROM users WHERE id = ? AND barbershop_id = ? AND role = 'barber'",
         (barber_id, session["barbershop_id"])
     ).fetchone()
     if barber is None:
@@ -1044,6 +1061,12 @@ def update_barber(barber_id):
     is_active = data.get("is_active", bool(barber["is_active"]))
     if not isinstance(is_active, bool):
         return jsonify({"error": "Estado de ativação inválido."}), 400
+    try:
+        commission_percent = parse_commission_percent(
+            data.get("commission_percent", barber["commission_percent"])
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     pin_hash = None
     if "pin" in data and data["pin"] != "":
         pin = data["pin"]
@@ -1052,17 +1075,18 @@ def update_barber(barber_id):
         pin_hash = generate_password_hash(pin)
     if pin_hash:
         db.execute(
-            "UPDATE users SET name = ?, is_active = ?, pin_hash = ?, can_serve = CASE WHEN ? = 1 THEN 1 ELSE can_serve END WHERE id = ? AND barbershop_id = ?",
-            (name, int(is_active), pin_hash, int(is_active), barber_id, session["barbershop_id"])
+            "UPDATE users SET name = ?, is_active = ?, pin_hash = ?, commission_percent = ?, can_serve = CASE WHEN ? = 1 THEN 1 ELSE can_serve END WHERE id = ? AND barbershop_id = ?",
+            (name, int(is_active), pin_hash, float(commission_percent), int(is_active), barber_id, session["barbershop_id"])
         )
     else:
         db.execute(
-            "UPDATE users SET name = ?, is_active = ?, can_serve = CASE WHEN ? = 1 THEN 1 ELSE can_serve END WHERE id = ? AND barbershop_id = ?",
-            (name, int(is_active), int(is_active), barber_id, session["barbershop_id"])
+            "UPDATE users SET name = ?, is_active = ?, commission_percent = ?, can_serve = CASE WHEN ? = 1 THEN 1 ELSE can_serve END WHERE id = ? AND barbershop_id = ?",
+            (name, int(is_active), float(commission_percent), int(is_active), barber_id, session["barbershop_id"])
         )
     db.commit()
     return jsonify({"message": "Colaborador atualizado.", "barber": {
-        "id": barber_id, "name": name, "is_active": is_active
+        "id": barber_id, "name": name, "is_active": is_active,
+        "commission_percent": float(commission_percent)
     }}), 200
 
 
@@ -1087,10 +1111,16 @@ def update_owner_provider():
         return jsonify({"error": "Informe can_serve como verdadeiro ou falso."}), 400
     db = get_db()
     current = db.execute(
-        "SELECT pin_hash FROM users WHERE id = ? AND barbershop_id = ? AND role = 'owner'",
+        "SELECT pin_hash, commission_percent FROM users WHERE id = ? AND barbershop_id = ? AND role = 'owner'",
         (session["user_id"], session["barbershop_id"])
     ).fetchone()
     pin_hash = current["pin_hash"] if current else None
+    try:
+        commission_percent = parse_commission_percent(
+            data.get("commission_percent", current["commission_percent"] if current else 0)
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     if data["can_serve"]:
         pin = data.get("pin", "")
         if pin:
@@ -1100,8 +1130,8 @@ def update_owner_provider():
         if not pin_hash:
             return jsonify({"error": "Defina um PIN de quatro números para aparecer como profissional."}), 400
     db.execute(
-        "UPDATE users SET can_serve = ?, pin_hash = ? WHERE id = ? AND barbershop_id = ? AND role = 'owner'",
-        (int(data["can_serve"]), pin_hash, session["user_id"], session["barbershop_id"])
+        "UPDATE users SET can_serve = ?, pin_hash = ?, commission_percent = ? WHERE id = ? AND barbershop_id = ? AND role = 'owner'",
+        (int(data["can_serve"]), pin_hash, float(commission_percent), session["user_id"], session["barbershop_id"])
     )
     db.commit()
     return jsonify({"message": "Preferência de atendimento do proprietário atualizada."}), 200
@@ -1498,17 +1528,34 @@ def complete_appointment_admin(appointment_id):
     db = get_db()
     row = db.execute(
         """
-        SELECT id, service_name, price_cents, starts_at
+        SELECT appointments.id, appointments.service_name,
+               appointments.price_cents, appointments.starts_at,
+               appointments.commission_percent,
+               users.commission_percent AS current_commission_percent
         FROM appointments
-        WHERE id = ? AND barbershop_id = ? AND status = 'scheduled'
+        LEFT JOIN users
+          ON users.id = appointments.barber_id
+         AND users.barbershop_id = appointments.barbershop_id
+        WHERE appointments.id = ? AND appointments.barbershop_id = ?
+          AND appointments.status = 'scheduled'
         """,
         (appointment_id, session["barbershop_id"])
     ).fetchone()
     if row is None:
         return jsonify({"error": "Agendamento ativo não encontrado."}), 404
+    commission_percent = (
+        row["commission_percent"]
+        if row["commission_percent"] is not None
+        else (row["current_commission_percent"] or 0)
+    )
+    commission_cents = int((
+        Decimal(row["price_cents"]) * Decimal(str(commission_percent)) / Decimal("100")
+    ).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     db.execute(
-        "UPDATE appointments SET status = 'completed' WHERE id = ? AND barbershop_id = ?",
-        (appointment_id, session["barbershop_id"])
+        """UPDATE appointments
+           SET status = 'completed', commission_percent = ?, commission_cents = ?
+           WHERE id = ? AND barbershop_id = ?""",
+        (commission_percent, commission_cents, appointment_id, session["barbershop_id"])
     )
     db.execute(
         """
