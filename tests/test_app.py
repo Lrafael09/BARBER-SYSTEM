@@ -227,6 +227,109 @@ class BarberSystemTests(unittest.TestCase):
         self.assertGreaterEqual(summary["expense_cents"], 50000)
         self.assertIn("daily", summary["goal_achieved"])
 
+    def test_staff_booking_lunch_and_commission_flow(self):
+        self.register_and_login_owner()
+        service_id = self.create_service()
+        self.create_schedule()
+
+        created = self.client.post("/admin/barbers", json={
+            "name": "Profissional Comissão",
+            "pin": "4321",
+            "commission_percent": "40.00",
+        })
+        self.assertEqual(created.status_code, 201, created.get_json())
+        staff_id = created.get_json()["barber"]["id"]
+        self.assertEqual(created.get_json()["barber"]["commission_percent"], 40.0)
+
+        login = self.client.post("/barber/barbearia-teste/login", json={
+            "barber_id": staff_id, "pin": "4321",
+        })
+        self.assertEqual(login.status_code, 200, login.get_json())
+        self.assertEqual(login.get_json()["barber"]["commission_percent"], 40.0)
+
+        today = date.today()
+        lunch_days = [{
+            "weekday": weekday,
+            "break_start": "13:00" if weekday == today.weekday() else None,
+            "break_end": "14:00" if weekday == today.weekday() else None,
+        } for weekday in range(7)]
+        lunch = self.client.put("/barber/schedule", json={"days": lunch_days})
+        self.assertEqual(lunch.status_code, 200, lunch.get_json())
+
+        schedule = self.client.get("/barber/schedule")
+        self.assertEqual(schedule.status_code, 200, schedule.get_json())
+        self.assertEqual(
+            schedule.get_json()["days"][today.weekday()]["break_start"], "13:00"
+        )
+        self.assertEqual(
+            schedule.get_json()["days"][today.weekday()]["break_end"], "14:00"
+        )
+
+        availability = self.client.get(
+            f"/barber/availability?service_id={service_id}&date={today.isoformat()}"
+        )
+        self.assertEqual(availability.status_code, 200, availability.get_json())
+        slots = availability.get_json()["slots"]
+        self.assertNotIn("12:00", slots)  # intervalo geral da barbearia
+        self.assertNotIn("13:00", slots)  # almoço individual do profissional
+        self.assertIn("14:00", slots)
+
+        booking = self.client.post("/barber/appointments", json={
+            "customer_name": "Cliente Balcão",
+            "customer_phone": "11987654321",
+            "service_id": service_id,
+            "starts_at": f"{today.isoformat()}T14:00",
+        })
+        self.assertEqual(booking.status_code, 201, booking.get_json())
+
+        own = self.client.get(f"/barber/appointments?date={today.isoformat()}")
+        self.assertEqual(own.status_code, 200, own.get_json())
+        self.assertEqual(len(own.get_json()["appointments"]), 1)
+        appointment_id = own.get_json()["appointments"][0]["id"]
+
+        completed = self.client.post(f"/barber/appointments/{appointment_id}/complete")
+        self.assertEqual(completed.status_code, 200, completed.get_json())
+
+        daily = self.client.get("/barber/commissions?period=daily")
+        self.assertEqual(daily.status_code, 200, daily.get_json())
+        self.assertEqual(daily.get_json()["completed_count"], 1)
+        self.assertEqual(daily.get_json()["sales_cents"], 4000)
+        self.assertEqual(daily.get_json()["commission_cents"], 1600)
+        self.assertEqual(daily.get_json()["commission_percent"], 40.0)
+
+        weekly = self.client.get("/barber/commissions?period=weekly")
+        monthly = self.client.get("/barber/commissions?period=monthly")
+        yearly = self.client.get("/barber/commissions?period=yearly")
+        for report in (weekly, monthly, yearly):
+            self.assertEqual(report.status_code, 200, report.get_json())
+            self.assertEqual(report.get_json()["commission_cents"], 1600)
+
+        self.client.post("/barber/logout")
+        self.client.post("/auth/login", json={
+            "email": "dono@example.com",
+            "password": "senha-forte-123",
+        })
+        updated = self.client.patch(f"/admin/barbers/{staff_id}", json={
+            "commission_percent": "50.00",
+        })
+        self.assertEqual(updated.status_code, 200, updated.get_json())
+        self.client.post("/auth/logout")
+        self.client.post("/barber/barbearia-teste/login", json={
+            "barber_id": staff_id, "pin": "4321",
+        })
+        historical = self.client.get("/barber/commissions?period=daily")
+        self.assertEqual(historical.status_code, 200, historical.get_json())
+        self.assertEqual(historical.get_json()["commission_cents"], 1600)
+
+    def test_invalid_commission_percentage_is_rejected(self):
+        self.register_and_login_owner()
+        invalid = self.client.post("/admin/barbers", json={
+            "name": "Comissão Inválida",
+            "pin": "1234",
+            "commission_percent": "100.01",
+        })
+        self.assertEqual(invalid.status_code, 400)
+        
     def test_products_owner_provider_and_brand_settings(self):
         slug = self.register_and_login_owner()
         self.create_service()
