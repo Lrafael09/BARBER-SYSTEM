@@ -7,6 +7,12 @@ test("cadastro de proprietário conclui e retorna slug após gravar a conta", as
   const db = {
     prepare(sql) {
       return {
+        async first() {
+          if (sql.includes("SELECT COUNT(*) AS n FROM barbershops")) return { n: 1 };
+          if (sql.includes("SELECT COUNT(*) AS n FROM users")) return { n: 0 };
+          if (sql.includes("SELECT id FROM barbershops ORDER BY id")) return { id: 1 };
+          return null;
+        },
         bind(...values) {
           return {
             async first() {
