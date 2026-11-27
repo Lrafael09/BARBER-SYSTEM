@@ -42,7 +42,7 @@
 .hours-break summary{font-size:11px;color:#a8f05a;cursor:pointer;user-select:none}
 .hours-break-fields{margin-top:8px}
 .hours-row.is-closed .hours-config input{cursor:not-allowed}
-.empty{padding:22px;text-align:center;border:1px dashed #3a453c;border-radius:12px;color:#97a199;font-size:13px}.auth-wrap{min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(ellipse at top,#182018 0,#080909 60%)}.auth-box{width:min(100%,920px)}.auth-head{text-align:center;margin-bottom:18px}.auth-head h1{font-size:26px;letter-spacing:.08em;margin:9px 0}.auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.brand-preview{width:76px;height:76px;object-fit:contain;border-radius:13px;background:#090b09;border:1px solid var(--line);padding:6px}.week-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.week-controls input{max-width:170px}.calendar-notes{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 15px}.calendar-notes span{color:#9ea79f;font-size:11px}.toggle{display:flex;align-items:center;gap:9px;margin-top:12px;color:#c4cec5;font-size:13px}.goal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.goal-card{padding:14px;background:#111712;border:1px solid #2c392d;border-radius:12px}.goal-card label{margin-top:0}.goal-card strong{font-size:14px}.public-link{color:var(--accent);overflow-wrap:anywhere}
+.empty{padding:22px;text-align:center;border:1px dashed #3a453c;border-radius:12px;color:#97a199;font-size:13px}.auth-wrap{min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(ellipse at top,#182018 0,#080909 60%)}.auth-box{width:min(100%,920px)}.auth-head{text-align:center;margin-bottom:18px}.auth-head h1{font-size:26px;letter-spacing:.08em;margin:9px 0}.auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.brand-preview{width:76px;height:76px;object-fit:contain;border-radius:13px;background:#090b09;border:1px solid var(--line);padding:6px}.week-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.week-controls input{max-width:170px}.calendar-notes{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 15px}.calendar-notes span{color:#9ea79f;font-size:11px}.toggle{display:flex;align-items:center;gap:9px;margin-top:12px;color:#c4cec5;font-size:13px}.goal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.goal-card{padding:14px;background:#111712;border:1px solid #2c392d;border-radius:12px}.goal-card label{margin-top:0}.goal-card strong{font-size:14px}.goal-progress-track{height:13px;background:#252c26;border-radius:20px;overflow:hidden}.goal-progress-fill{height:100%;width:0;background:var(--accent);border-radius:20px;transition:width .25s ease}.public-link{color:var(--accent);overflow-wrap:anywhere}
 @media(max-width:1100px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two-col{grid-template-columns:1fr}.layout{grid-template-columns:220px minmax(0,1fr)}.sidebar{padding:17px 10px}}
 @media(max-width:900px){.hours-row{grid-template-columns:100px minmax(0,1fr)}.calendar-scroll{max-height:680px}}
 @media(max-width:760px){.agenda-filters{width:100%}.agenda-filters select{flex:1;min-width:0;max-width:none}.hours-row{grid-template-columns:1fr}.hours-day{display:flex;align-items:center;justify-content:space-between}.calendar-head-row,.calendar-body-row{grid-template-columns:58px repeat(var(--lane-count),minmax(175px,1fr))}.calendar-lane{min-width:175px}.layout{display:block}.sidebar{position:relative;height:auto;padding:10px;border-right:0;border-bottom:1px solid var(--line);gap:9px}.logo-line{padding:4px 7px 10px}.nav{display:flex;overflow:auto;gap:5px}.nav button{width:auto;white-space:nowrap;padding:9px 11px}.nav .nav-icon{display:none}.sidebar-foot{display:none}.main{padding:18px 12px 40px}.topbar{margin-bottom:18px}.day-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.field-grid.three,.goal-grid{grid-template-columns:1fr 1fr}.schedule-row{grid-template-columns:80px 55px repeat(2,minmax(0,1fr))}.schedule-row .optional{display:none}}
@@ -161,7 +161,19 @@
     <section class="view" id="view-finance">
       <div class="section-head"><h1>Financeiro</h1><p class="muted">Acompanhe entradas, despesas e resultado. Faturamento não é a mesma coisa que lucro.</p></div>
       <section class="panel"><div class="row"><div><h2>Resultado do período</h2><p class="muted" id="finance-period-label"></p></div><select id="finance-period" style="width:auto"><option value="today">Hoje</option><option value="week">Esta semana</option><option value="month" selected>Este mês</option><option value="year">Este ano</option></select></div><div class="metric-grid" id="finance-metrics" style="margin-top:12px"></div></section>
-      <section class="panel" style="margin-top:14px"><h2>Metas de faturamento</h2><p class="muted">Defina objetivos diários, semanais e mensais. O progresso considera entradas do caixa no período.</p><div class="goal-grid" style="margin-top:12px"><div class="goal-card"><label for="goal-daily">Meta diária (R$)</label><input id="goal-daily" inputmode="decimal" placeholder="0,00"><div id="goal-progress-daily" class="muted"></div></div><div class="goal-card"><label for="goal-weekly">Meta semanal (R$)</label><input id="goal-weekly" inputmode="decimal" placeholder="0,00"><div id="goal-progress-weekly" class="muted"></div></div><div class="goal-card"><label for="goal-monthly">Meta mensal (R$)</label><input id="goal-monthly" inputmode="decimal" placeholder="0,00"><div id="goal-progress-monthly" class="muted"></div></div></div><button id="save-goals">Salvar metas</button><div id="goals-message" class="message"></div></section>
+      <section class="panel" style="margin-top:14px">
+        <div class="row"><div><h2>Meta de faturamento</h2><p class="muted">A meta é calculada automaticamente: despesas fixas mensais + lucro desejado.</p></div><select id="goal-period" style="width:auto"><option value="daily">Hoje</option><option value="weekly">Esta semana</option><option value="monthly" selected>Este mês</option></select></div>
+        <div class="field-grid" style="margin-top:12px"><div><label for="desired-profit">Quanto o dono deseja lucrar no mês (R$)</label><input id="desired-profit" inputmode="decimal" placeholder="0,00"></div><div class="goal-card"><span class="muted">Despesas fixas mensais</span><strong id="fixed-costs-total">R$ 0,00</strong><span class="muted">Meta mensal total: <strong id="monthly-goal-total">R$ 0,00</strong></span></div></div>
+        <div class="goal-card" style="margin-top:14px"><div class="goal-progress-track"><div id="goal-progress-bar" class="goal-progress-fill"></div></div><div class="row" style="margin-top:10px"><strong id="goal-progress-summary">Carregando meta...</strong><strong id="goal-progress-percent">0%</strong></div><p class="muted" id="goal-calculation" style="margin-bottom:0"></p></div>
+        <div class="message" id="goals-message"></div>
+      </section>
+      <section class="panel" style="margin-top:14px">
+        <h2>Despesas fixas mensais</h2><p class="muted">Cadastre aluguel, água, luz, internet e outros custos recorrentes. Esses valores entram no cálculo da meta, mas não são lançados automaticamente no histórico do caixa.</p>
+        <div class="field-grid" style="margin-top:10px"><div><label for="fixed-cost-name">Nome da despesa</label><input id="fixed-cost-name" maxlength="100" placeholder="Ex.: Aluguel"></div><div><label for="fixed-cost-amount">Valor mensal (R$)</label><input id="fixed-cost-amount" inputmode="decimal" placeholder="0,00"></div></div>
+        <button id="add-fixed-cost" class="secondary" style="margin-top:10px">Adicionar despesa</button>
+        <div id="fixed-costs-list" class="list" style="margin-top:12px"></div>
+        <button id="save-financial-config" style="margin-top:12px">Salvar despesas e meta</button>
+      </section>
       <div class="two-col" style="margin-top:14px">
         <section class="panel"><h2>Novo lançamento</h2><label for="entry-type">Tipo</label><select id="entry-type"><option value="income">Entrada</option><option value="expense">Saída / despesa</option></select><label for="entry-description">Descrição</label><input id="entry-description" maxlength="160" placeholder="Ex.: Venda de produto, aluguel..."><div class="field-grid"><div><label for="entry-category">Categoria</label><input id="entry-category" maxlength="80" placeholder="Ex.: Produtos, aluguel"></div><div><label for="entry-amount">Valor (R$)</label><input id="entry-amount" inputmode="decimal" placeholder="0,00"></div></div><label for="entry-date">Data</label><input id="entry-date" type="date"><button id="add-entry">Salvar lançamento</button><div id="entry-message" class="message"></div></section>
         <section class="panel"><h2>Histórico do caixa</h2><p class="muted">Atendimentos concluídos entram automaticamente como receita. Lançamentos manuais podem ser removidos.</p><div id="finance-entries" class="list"></div></section>
@@ -566,12 +578,51 @@ async function loadCustomers(){
 $('refresh-customers').addEventListener('click',()=>loadCustomers().catch(e=>showMessage('customers-message',e.message,true)));
 
 async function loadFinance(){
- const period=$('finance-period').value;const data=await api('/admin/finance/summary?period='+period);currentFinance=data;
+ const period=$('finance-period').value;
+ const [data,config]=await Promise.all([
+  api('/admin/finance/summary?period='+period),
+  api('/admin/finance/config')
+ ]);
+ currentFinance=data;currentFinancialConfig=config;
  $('finance-period-label').textContent='De '+new Date(data.start+'T12:00:00').toLocaleDateString('pt-BR')+' até '+new Date(data.end+'T12:00:00').toLocaleDateString('pt-BR');
  $('finance-metrics').replaceChildren(metric('Faturamento / entradas',money(data.income_cents)),metric('Despesas / saídas',money(data.expense_cents)),metric('Lucro / resultado',money(data.profit_cents)),metric('Lançamentos',data.entry_count));
- $('goal-daily').value=(data.goals.daily/100).toFixed(2).replace('.',',');$('goal-weekly').value=(data.goals.weekly/100).toFixed(2).replace('.',',');$('goal-monthly').value=(data.goals.monthly/100).toFixed(2).replace('.',',');
+ $('desired-profit').value=(config.desired_profit_cents/100).toFixed(2).replace('.',',');
+ renderFixedCosts(config.fixed_costs||[]);
+ renderGoalProgress();
  const entries=await api('/admin/finance/entries?from='+data.start+'&to='+data.end);renderFinanceEntries(entries.entries);
- [['daily','goal-progress-daily'],['weekly','goal-progress-weekly'],['monthly','goal-progress-monthly']].forEach(([k,id])=>{const goal=data.goals[k]||0;const achieved=(data.goal_achieved||{})[k]||0;const pct=goal?Math.min(100,achieved/goal*100):0;$(id).textContent=goal?money(achieved)+' de '+money(goal)+' · '+Math.round(pct)+'%':'Defina uma meta para acompanhar o progresso.';});
+}
+let currentFinancialConfig={fixed_costs:[],desired_profit_cents:0};
+function renderFixedCosts(costs){
+ const root=$('fixed-costs-list');root.replaceChildren();
+ if(!costs.length){root.append(empty('Nenhuma despesa fixa cadastrada.'));return;}
+ costs.forEach((cost,index)=>{
+  root.append(row(cost.name,money(cost.amount_cents)+' por mês',[
+   action('Remover','danger',()=>{currentFinancialConfig.fixed_costs.splice(index,1);renderFixedCosts(currentFinancialConfig.fixed_costs);renderGoalProgress();})
+  ]));
+ });
+ const total=costs.reduce((sum,cost)=>sum+Number(cost.amount_cents||0),0);
+ $('fixed-costs-total').textContent=money(total);
+ $('monthly-goal-total').textContent=money(total+Number(currentFinancialConfig.desired_profit_cents||0));
+}
+function renderGoalProgress(){
+ if(!currentFinance||!currentFinancialConfig)return;
+ const period=$('goal-period').value;
+ const names={daily:'Meta de hoje',weekly:'Meta da semana',monthly:'Meta do mês'};
+ const goal=Number(currentFinance.goals?.[period]||0);
+ const achieved=Number(currentFinance.goal_achieved?.[period]||0);
+ const percent=goal?Math.min(100,achieved/goal*100):0;
+ $('goal-progress-bar').style.width=percent+'%';
+ $('goal-progress-summary').textContent=goal?money(achieved)+' de '+money(goal):'Cadastre despesas e defina seu lucro desejado.';
+ $('goal-progress-percent').textContent=Math.round(percent)+'%';
+ $('goal-calculation').textContent=names[period]+' · A meta mensal considera '+money(currentFinance.fixed_costs_total_cents||0)+' em despesas fixas e '+money(currentFinance.desired_profit_cents||0)+' de lucro desejado. O progresso soma somente atendimentos concluídos.';
+ const total=Number(currentFinancialConfig.fixed_costs||[]).reduce((sum,cost)=>sum+Number(cost.amount_cents||0),0);
+ $('fixed-costs-total').textContent=money(total);
+ $('monthly-goal-total').textContent=money(total+Number(currentFinancialConfig.desired_profit_cents||0));
+}
+function renderFinanceEntries(entries){
+ const root=$('finance-entries');root.replaceChildren();
+ if(!entries.length){root.append(empty('Nenhum lançamento neste período.'));return;}
+ entries.forEach(e=>{const type=e.entry_type==='income'?'Entrada':'Saída';const amount=(e.entry_type==='income'?'+ ':'− ')+money(e.amount_cents);const buttons=[];if(!e.appointment_id)buttons.push(action('Remover','danger',async()=>{if(!confirm('Remover este lançamento?'))return;try{await api('/admin/finance/entries/'+e.id,{method:'DELETE'});await loadFinance();}catch(err){showMessage('entry-message',err.message,true);}}));root.append(row(type+' · '+e.description, e.entry_date+' · '+(e.category||'Sem categoria')+' · '+amount,buttons));});
 }
 function renderFinanceEntries(entries){
  const root=$('finance-entries');root.replaceChildren();
@@ -579,9 +630,28 @@ function renderFinanceEntries(entries){
  entries.forEach(e=>{const type=e.entry_type==='income'?'Entrada':'Saída';const amount=(e.entry_type==='income'?'+ ':'− ')+money(e.amount_cents);const buttons=[];if(!e.appointment_id)buttons.push(action('Remover','danger',async()=>{if(!confirm('Remover este lançamento?'))return;try{await api('/admin/finance/entries/'+e.id,{method:'DELETE'});await loadFinance();}catch(err){showMessage('entry-message',err.message,true);}}));root.append(row(type+' · '+e.description, e.entry_date+' · '+(e.category||'Sem categoria')+' · '+amount,buttons));});
 }
 $('finance-period').addEventListener('change',()=>loadFinance().catch(e=>showMessage('entry-message',e.message,true)));
-$('save-goals').addEventListener('click',async()=>{
- try{await api('/admin/finance/goals',{method:'PUT',body:JSON.stringify({daily:parseMoney($('goal-daily').value),weekly:parseMoney($('goal-weekly').value),monthly:parseMoney($('goal-monthly').value)})});showMessage('goals-message','Metas salvas.');await loadFinance();}
- catch(e){showMessage('goals-message',e.message,true);}
+$('goal-period').addEventListener('change',renderGoalProgress);
+$('desired-profit').addEventListener('input',()=>{
+ currentFinancialConfig.desired_profit_cents=Math.max(0,Math.round(Number(parseMoney($('desired-profit').value)||0)*100));
+ renderGoalProgress();
+});
+$('add-fixed-cost').addEventListener('click',()=>{
+ const name=$('fixed-cost-name').value.trim();
+ const amount=Math.round(Number(parseMoney($('fixed-cost-amount').value)||0)*100);
+ if(!name||name.length>100||!Number.isFinite(amount)||amount<=0){showMessage('goals-message','Informe o nome e um valor mensal maior que zero.',true);return;}
+ currentFinancialConfig.fixed_costs.push({name,amount_cents:amount});
+ $('fixed-cost-name').value='';$('fixed-cost-amount').value='';
+ renderFixedCosts(currentFinancialConfig.fixed_costs);renderGoalProgress();
+ showMessage('goals-message','Despesa adicionada. Salve para confirmar.');
+});
+$('save-financial-config').addEventListener('click',async()=>{
+ try{
+  await api('/admin/finance/config',{method:'PUT',body:JSON.stringify({
+   desired_profit:parseMoney($('desired-profit').value)||0,
+   fixed_costs:currentFinancialConfig.fixed_costs.map(cost=>({name:cost.name,amount:(Number(cost.amount_cents)/100).toFixed(2)}))
+  })});
+  showMessage('goals-message','Despesas fixas e lucro desejado salvos.');await loadFinance();
+ }catch(e){showMessage('goals-message',e.message,true);}
 });
 $('add-entry').addEventListener('click',async()=>{
  try{await api('/admin/finance/entries',{method:'POST',body:JSON.stringify({entry_type:$('entry-type').value,description:$('entry-description').value,category:$('entry-category').value,amount:parseMoney($('entry-amount').value),entry_date:$('entry-date').value})});$('entry-description').value='';$('entry-category').value='';$('entry-amount').value='';showMessage('entry-message','Lançamento salvo.');await loadFinance();}
