@@ -16,6 +16,10 @@ from flask import Flask, jsonify
 
 from database import init_app as init_database
 from database import init_db
+from routes.auth import auth_bp
+from routes.public import public_bp
+from routes.admin import admin_bp
+from routes.barber import barber_bp
 
 
 def create_app():
@@ -32,6 +36,12 @@ def create_app():
 
     # Configura o caminho do SQLite e o fechamento das conexões.
     init_database(app)
+
+    # Registra os módulos de rotas do sistema.
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(public_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(barber_bp)
 
     # Cria as tabelas iniciais caso ainda não existam.
     with app.app_context():
