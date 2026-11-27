@@ -2,18 +2,20 @@
 BARBER-SYSTEM
 Arquivo principal da aplicação.
 
-Responsabilidades desta primeira versão:
+Responsabilidades:
 - Criar e configurar a aplicação Flask.
+- Conectar o gerenciamento do banco de dados.
+- Inicializar as tabelas necessárias.
 - Registrar as primeiras rotas de teste.
 - Permitir iniciar o servidor em ambiente local.
-
-O banco de dados, autenticação e módulos do sistema serão adicionados
-em etapas separadas.
 """
 
 import os
 
 from flask import Flask, jsonify
+
+from database import init_app as init_database
+from database import init_db
 
 
 def create_app():
@@ -21,12 +23,19 @@ def create_app():
 
     app = Flask(__name__)
 
-    # A chave secreta será configurada por variável de ambiente.
-    # Em desenvolvimento, usamos um valor local para facilitar os testes.
+    # A chave secreta deve ser definida no ambiente em produção.
+    # O valor abaixo serve somente para desenvolvimento local.
     app.config["SECRET_KEY"] = os.environ.get(
         "SECRET_KEY",
         "chave-local-apenas-para-desenvolvimento"
     )
+
+    # Configura o caminho do SQLite e o fechamento das conexões.
+    init_database(app)
+
+    # Cria as tabelas iniciais caso ainda não existam.
+    with app.app_context():
+        init_db()
 
     @app.route("/")
     def inicio():
@@ -39,8 +48,16 @@ def create_app():
 
     @app.route("/health")
     def verificar_status():
-        """Rota simples para verificar se o servidor está respondendo."""
-        return jsonify({"status": "ok"}), 200
+        """Verifica se a aplicação e o banco de dados estão acessíveis."""
+
+        # Executa uma consulta simples para confirmar a conexão com SQLite.
+        from database import get_db
+        get_db().execute("SELECT 1").fetchone()
+
+        return jsonify({
+            "status": "ok",
+            "database": "connected"
+        }), 200
 
     return app
 
@@ -50,8 +67,7 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    # O modo de depuração fica ativo apenas ao executar localmente.
-    # Não deve ser usado quando o sistema estiver publicado.
+    # Servidor local de desenvolvimento. Não usar debug em produção.
     app.run(
         host="127.0.0.1",
         port=5000,
