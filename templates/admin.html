@@ -219,11 +219,11 @@ async function loadOverview(){
  const future=appointments.appointments.filter(a=>a.status==='scheduled').slice(0,5);
  if(!future.length)upcoming.append(empty('Nenhum atendimento agendado para hoje.'));
  future.forEach(a=>upcoming.append(row(a.starts_at.slice(11,16)+' · '+a.customer_name,a.service_name+' · '+(a.barber_name||'Sem profissional'),[])));
- const goalData=finance.goals;const goalRoot=$('overview-goals');goalRoot.replaceChildren();
+ const goalData=finance.goals;const achieved=finance.goal_achieved||{};const goalRoot=$('overview-goals');goalRoot.replaceChildren();
  [['daily','Diária'],['weekly','Semanal'],['monthly','Mensal']].forEach(([k,label])=>{
-  const card=document.createElement('div');card.className='goal-card';const target=goalData[k]||0;const current=finance.income_cents||0;
+  const card=document.createElement('div');card.className='goal-card';const target=goalData[k]||0;const current=achieved[k]||0;
   card.innerHTML='<div class="muted"></div><strong></strong><div class="progress"><span></span></div><div class="tiny"></div>';
-  card.children[0].textContent='Meta '+label;card.children[1].textContent=money(target);
+  card.children[0].textContent='Meta '+label;card.children[1].textContent=money(target)+' · '+money(current);
   const pct=target>0?Math.min(100,current/target*100):0;card.querySelector('.progress span').style.width=pct+'%';
   card.querySelector('.tiny').textContent=target>0?Math.round(pct)+'% da meta no período selecionado':'Meta ainda não definida';
   goalRoot.append(card);
@@ -424,7 +424,7 @@ async function loadFinance(){
  $('finance-metrics').replaceChildren(metric('Faturamento / entradas',money(data.income_cents)),metric('Despesas / saídas',money(data.expense_cents)),metric('Lucro / resultado',money(data.profit_cents)),metric('Lançamentos',data.entry_count));
  $('goal-daily').value=(data.goals.daily/100).toFixed(2).replace('.',',');$('goal-weekly').value=(data.goals.weekly/100).toFixed(2).replace('.',',');$('goal-monthly').value=(data.goals.monthly/100).toFixed(2).replace('.',',');
  const entries=await api('/admin/finance/entries?from='+data.start+'&to='+data.end);renderFinanceEntries(entries.entries);
- [['daily','goal-progress-daily'],['weekly','goal-progress-weekly'],['monthly','goal-progress-monthly']].forEach(([k,id])=>{const goal=data.goals[k]||0;const pct=goal?Math.min(100,data.income_cents/goal*100):0;$(id).textContent=goal?Math.round(pct)+'% da meta no recorte exibido':'Defina uma meta para acompanhar o progresso.';});
+ [['daily','goal-progress-daily'],['weekly','goal-progress-weekly'],['monthly','goal-progress-monthly']].forEach(([k,id])=>{const goal=data.goals[k]||0;const achieved=(data.goal_achieved||{})[k]||0;const pct=goal?Math.min(100,achieved/goal*100):0;$(id).textContent=goal?money(achieved)+' de '+money(goal)+' · '+Math.round(pct)+'%':'Defina uma meta para acompanhar o progresso.';});
 }
 function renderFinanceEntries(entries){
  const root=$('finance-entries');root.replaceChildren();
