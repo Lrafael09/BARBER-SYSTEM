@@ -67,6 +67,7 @@ p{color:var(--muted);line-height:1.5;margin:6px 0}
 .item-service{display:block;font-size:10px;color:#b6c2b7;margin-top:3px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .item-actions{display:flex;gap:6px;margin-top:5px}
 .item-actions button{width:auto;padding:3px 8px;font-size:10px;border-radius:6px}
+.item-actions select{width:auto;min-width:112px;max-width:145px;padding:4px 6px;font-size:10px;border-radius:6px}
 .item-actions .cancel{background:#432525;color:#ffc0c0;border:1px solid #714141}
 .empty-agenda{padding:22px;text-align:center;color:#8b978d;font-size:13px}
 .drawer-backdrop{position:fixed;inset:0;background:#0009;z-index:20;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -341,13 +342,24 @@ function renderCalendar(items,selected,daySchedule){
   const name=document.createElement('strong');name.textContent=item.customer_name;
   const service=document.createElement('span');service.className='item-service';service.textContent=item.service_name+' · '+money(item.price_cents);
   card.append(time,name,service);
-  if(item.status==='scheduled'&&duration>=25){
+  if(duration>=25){
    const actions=document.createElement('div');actions.className='item-actions';
-   const done=document.createElement('button');done.textContent='Concluir';
-   done.addEventListener('click',async()=>{try{await api('/barber/appointments/'+item.id+'/complete',{method:'POST'});await loadAgenda();}catch(e){message('agenda-message',e.message,true);}});
-   const cancel=document.createElement('button');cancel.className='cancel';cancel.textContent='Cancelar';
-   cancel.addEventListener('click',async()=>{const reason=prompt('Informe o motivo do cancelamento:');if(!reason)return;try{await api('/barber/appointments/'+item.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});await loadAgenda();}catch(e){message('agenda-message',e.message,true);}});
-   actions.append(done,cancel);card.append(actions);
+   const status=document.createElement('select');status.setAttribute('aria-label','Editar status do atendimento');
+   [['scheduled','Agendado'],['completed','Concluído'],['cancelled','Cancelado']].forEach(([value,label])=>status.add(new Option(label,value)));
+   status.value=item.status;
+   const save=document.createElement('button');save.textContent='Salvar';
+   save.addEventListener('click',async()=>{
+    if(status.value==='cancelled'){
+     const reason=prompt('Informe o motivo do cancelamento:');
+     if(!reason)return;
+     try{await api('/barber/appointments/'+item.id+'/status',{method:'PATCH',body:JSON.stringify({status:status.value,reason})});await loadAgenda();}
+     catch(e){message('agenda-message',e.message,true);}
+     return;
+    }
+    try{await api('/barber/appointments/'+item.id+'/status',{method:'PATCH',body:JSON.stringify({status:status.value})});await loadAgenda();}
+    catch(e){message('agenda-message',e.message,true);}
+   });
+   actions.append(status,save);card.append(actions);
   }
   lane.append(card);
  });
