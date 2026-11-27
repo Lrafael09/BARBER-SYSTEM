@@ -241,6 +241,8 @@ async function barberCommissions(env, session, url) {
 }
 
 export async function handleBarberApi(request, env, url) {
+  if (!url.pathname.startsWith("/api/barber/")) return null;
+
   const staff = url.pathname.match(/^\/api\/barber\/shops\/([a-z0-9-]+)\/staff$/);
   if (staff && request.method === "GET") {
     const shop = await env.DB.prepare("SELECT id FROM barbershops WHERE slug=?").bind(staff[1]).first();
