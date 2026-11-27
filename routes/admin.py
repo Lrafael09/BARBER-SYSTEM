@@ -1060,11 +1060,25 @@ def update_owner_provider():
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not isinstance(data.get("can_serve"), bool):
         return jsonify({"error": "Informe can_serve como verdadeiro ou falso."}), 400
-    get_db().execute(
-        "UPDATE users SET can_serve = ? WHERE id = ? AND barbershop_id = ? AND role = 'owner'",
-        (int(data["can_serve"]), session["user_id"], session["barbershop_id"])
+    db = get_db()
+    current = db.execute(
+        "SELECT pin_hash FROM users WHERE id = ? AND barbershop_id = ? AND role = 'owner'",
+        (session["user_id"], session["barbershop_id"])
+    ).fetchone()
+    pin_hash = current["pin_hash"] if current else None
+    if data["can_serve"]:
+        pin = data.get("pin", "")
+        if pin:
+            if not isinstance(pin, str) or len(pin) != 4 or not pin.isdigit():
+                return jsonify({"error": "O PIN do proprietário deve ter quatro números."}), 400
+            pin_hash = generate_password_hash(pin)
+        if not pin_hash:
+            return jsonify({"error": "Defina um PIN de quatro números para aparecer como profissional."}), 400
+    db.execute(
+        "UPDATE users SET can_serve = ?, pin_hash = ? WHERE id = ? AND barbershop_id = ? AND role = 'owner'",
+        (int(data["can_serve"]), pin_hash, session["user_id"], session["barbershop_id"])
     )
-    get_db().commit()
+    db.commit()
     return jsonify({"message": "Preferência de atendimento do proprietário atualizada."}), 200
 
 
