@@ -58,6 +58,7 @@ def init_db():
             pin_hash TEXT,
             role TEXT NOT NULL CHECK (role IN ('owner', 'barber')),
             can_serve INTEGER NOT NULL DEFAULT 0 CHECK (can_serve IN (0, 1)),
+            commission_percent REAL NOT NULL DEFAULT 0 CHECK (commission_percent BETWEEN 0 AND 100),
             is_active INTEGER NOT NULL DEFAULT 1
                 CHECK (is_active IN (0, 1)),
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -106,6 +107,8 @@ def init_db():
                 CHECK (duration_minutes > 0),
             starts_at TEXT NOT NULL,
             ends_at TEXT NOT NULL,
+            commission_percent REAL,
+            commission_cents INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'scheduled'
                 CHECK (status IN ('scheduled', 'completed', 'cancelled')),
             cancellation_reason TEXT,
@@ -268,6 +271,16 @@ def init_db():
     if "can_serve" not in user_columns:
         db.execute("ALTER TABLE users ADD COLUMN can_serve INTEGER NOT NULL DEFAULT 0")
         db.execute("UPDATE users SET can_serve = 1 WHERE role = 'barber'")
+    if "commission_percent" not in user_columns:
+        db.execute("ALTER TABLE users ADD COLUMN commission_percent REAL NOT NULL DEFAULT 0")
+
+    appointment_columns = {
+        row["name"] for row in db.execute("PRAGMA table_info(appointments)").fetchall()
+    }
+    if "commission_percent" not in appointment_columns:
+        db.execute("ALTER TABLE appointments ADD COLUMN commission_percent REAL")
+    if "commission_cents" not in appointment_columns:
+        db.execute("ALTER TABLE appointments ADD COLUMN commission_cents INTEGER NOT NULL DEFAULT 0")
 
     db.commit()
 
