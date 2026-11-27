@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS barbershops (
             commission_cents INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'scheduled'
                 CHECK (status IN ('scheduled', 'completed', 'cancelled')),
+            booking_type TEXT NOT NULL DEFAULT 'appointment'
+                CHECK (booking_type IN ('appointment', 'walk_in')),
+            queue_number INTEGER,
             cancellation_reason TEXT,
             cancelled_at TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -239,6 +242,10 @@ CREATE TABLE IF NOT EXISTS barbershops (
 
         CREATE INDEX IF NOT EXISTS idx_appointments_barber_schedule
             ON appointments (barbershop_id, barber_id, starts_at, status);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_walkin_queue
+            ON appointments (barbershop_id, substr(starts_at, 1, 10), queue_number)
+            WHERE booking_type = 'walk_in';
 
         CREATE INDEX IF NOT EXISTS idx_time_blocks_schedule
             ON time_blocks (barbershop_id, starts_at, ends_at);
