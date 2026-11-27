@@ -67,17 +67,18 @@ async function api(request, env, url) {
    if(env.OWNER_REGISTRATION_ENABLED!=="true")return json({error:"Novos cadastros estão temporariamente desativados."},403);
    const emailUsed=await env.DB.prepare("SELECT id FROM users WHERE lower(email)=? AND role='owner' LIMIT 1").bind(email).first();
    if(emailUsed)return json({error:"Este e-mail já possui uma conta. Use outro e-mail ou entre no painel."},409);
-   const phoneUsed=await env.DB.prepare("SELECT id FROM barbershops WHERE whatsapp=? LIMIT 1").bind(wa).first();
+   const shopCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM barbershops").first();
+   const userCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
+   let legacy=null;
+   if(shopCount.n===1&&userCount.n===0)legacy=await env.DB.prepare("SELECT id FROM barbershops ORDER BY id LIMIT 1").first();
+   const phoneUsed=await env.DB.prepare("SELECT id FROM barbershops WHERE whatsapp=? AND id<>? LIMIT 1").bind(wa,legacy?.id||0).first();
    if(phoneUsed)return json({error:"Este WhatsApp já está vinculado a uma barbearia. Use outro número."},409);
    const base=shop.normalize("NFKD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
    if(!base)return json({error:"Nome inválido para endereço."},400);
    let slug=base,i=2;
-   while(await env.DB.prepare("SELECT id FROM barbershops WHERE slug=?").bind(slug).first())slug=base+"-"+i++;
-   const shopCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM barbershops").first();
-   const userCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
+   while(await env.DB.prepare("SELECT id FROM barbershops WHERE slug=? AND id<>?").bind(slug,legacy?.id||0).first())slug=base+"-"+i++;
    let barbershopId,createdNewShop=false;
-   if(shopCount.n===1&&userCount.n===0){
-    const legacy=await env.DB.prepare("SELECT id FROM barbershops ORDER BY id LIMIT 1").first();
+   if(legacy){
     barbershopId=legacy.id;
    }else{
     const created=await env.DB.prepare("INSERT INTO barbershops(name,slug,whatsapp) VALUES(?,?,?)").bind(shop,slug,wa).run();
