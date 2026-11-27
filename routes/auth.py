@@ -256,10 +256,13 @@ def current_owner():
 
     user = get_db().execute(
         """
-        SELECT id, barbershop_id, name, email, role
+        SELECT users.id, users.barbershop_id, users.name, users.email,
+               users.role, barbershops.slug AS barbershop_slug
         FROM users
-        WHERE id = ? AND barbershop_id = ?
-          AND role = 'owner' AND is_active = 1
+        INNER JOIN barbershops
+          ON barbershops.id = users.barbershop_id
+        WHERE users.id = ? AND users.barbershop_id = ?
+          AND users.role = 'owner' AND users.is_active = 1
         """,
         (session["user_id"], session["barbershop_id"])
     ).fetchone()
@@ -273,7 +276,8 @@ def current_owner():
         "barbershop_id": user["barbershop_id"],
         "name": user["name"],
         "email": user["email"],
-        "role": user["role"]
+        "role": user["role"],
+        "barbershop_slug": user["barbershop_slug"]
     }), 200
 
 
