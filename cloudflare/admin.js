@@ -83,7 +83,7 @@ async function openDaysInRange(env, shopId, startValue, endValue) {
 async function monthlyRevenueTarget(env, shopId, year, month) {
   const config = await financialConfig(env, shopId);
   const start = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-01";
-  const endDate = new Date(Date.UTC(year, month, 0));
+  const endDate = new Date(Date.UTC(year, month + 1, 0));
   const end = dateText(endDate);
   const openDays = await openDaysInRange(env, shopId, start, end);
   const monthlyTarget = config.totalCosts + config.desiredProfit;
