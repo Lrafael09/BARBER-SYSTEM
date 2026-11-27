@@ -227,12 +227,9 @@ export default {
       if (url.pathname === "/" || url.pathname === "/admin" || url.pathname === "/admin/") {
         response = Response.redirect(new URL("/admin/panel", url), 302);
       } else if (url.pathname === "/admin/panel" || url.pathname === "/admin/panel/") {
-        const currentSession = await readSession(request, env);
-        if (currentSession?.role === "barber") {
-          response = Response.redirect(new URL("/barber/" + currentSession.barbershop_slug, url), 303);
-        } else {
-          response = html(ADMIN_PAGE);
-        }
+        // A URL sempre entrega o painel solicitado. A autorização é aplicada
+        // nas rotas /api/admin/*, nunca por redirecionamento de página.
+        response = html(ADMIN_PAGE);
       } else if (url.pathname === "/admin/panel/index.html") {
         response = html(ADMIN_PAGE);
       } else if (/^\/barber\/[a-z0-9-]+$/.test(url.pathname)) {
