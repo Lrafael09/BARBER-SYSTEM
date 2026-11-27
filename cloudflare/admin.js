@@ -290,6 +290,56 @@ async function createWalkInQueue(request, env, shopId) {
   ).bind(serviceId, shopId).first();
   if (!service) return json({ error: "Serviço não encontrado ou inativo." }, 404);
 
+  let barberId = null, commissionPercent = null, effective = null, staffBreak = null;
+  if (data.barber_id !== null && data.barber_id !== undefined && data.barber_id !== "") {
+    barberId = Number(data.barber_id);
+    if (!Number.isSafeInteger(barberId) || barberId < 1) return json({ error: "Selecione um profissional válido." }, 400);
+    const barber = await env.DB.prepare(
+      "SELECT id,commission_percent FROM users WHERE id=? AND barbershop_id=? AND is_active=1 AND (role='barber' OR (role='owner' AND can_serve=1))"
+    ).bind(barberId, shopId).first();
+    if (!barber) return json({ error: "Profissional não encontrado ou indisponível." }, 404);
+    commissionPercent = barber.commission_percent || 0;
+    effective = await env.DB.prepare(
+      "SELECT is_open,open_time,close_time,break_start,break_end FROM staff_hours WHERE barbershop_id=? AND user_id=? AND weekday=5"
+    ).bind(shopId, barberId).first();
+    staffBreak = await env.DB.prepare(
+      "SELECT break_start,break_end FROM staff_breaks WHERE barbershop_id=? AND user_id=? AND weekday=5"
+    ).bind(shopId, barberId).first();
+  }
+
+  const business = await env.DB.prepare(
+    "SELECT is_open,open_time,close_time,break_start,break_end FROM business_hours WHERE barbershop_id=? AND weekday=5"
+  ).bind(shopId).first();
+  effective = effective || business;
+  const toMinutes = value => {
+    if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
+    const [hour, minute] = value.split(":").map(Number);
+    return hour * 60 + minute;
+  };
+  const nowMinutes = localNow.minutes;
+  const opening = toMinutes(effective?.open_time);
+  const closing = toMinutes(effective?.close_time);
+  if (!business?.is_open || !effective?.is_open || opening === null || closing === null ||
+      nowMinutes < opening || nowMinutes >= closing) {
+    return json({ error: "A barbearia ou o profissional está fora do expediente neste momento." }, 409);
+  }
+  for (const [start, end] of [[business.break_start,business.break_end],[effective.break_start,effective.break_end],[staffBreak?.break_start,staffBreak?.break_end]]) {
+    const breakStart = toMinutes(start), breakEnd = toMinutes(end);
+    if (breakStart !== null && breakEnd !== null && nowMinutes < breakEnd && nowMinutes + Number(service.duration_minutes) > breakStart) {
+      return json({ error: "A fila está pausada durante o intervalo." }, 409);
+    }
+  }
+  const startsAt = localNow.date + "T" + localNow.time + ":00";
+  const endMinutes = nowMinutes + Number(service.duration_minutes);
+  if (!Number.isSafeInteger(Number(service.duration_minutes)) || endMinutes >= 1440) {
+    return json({ error: "A duração do serviço está inválida." }, 400);
+  }
+  const endsAt = localNow.date + "T" + String(Math.floor(endMinutes / 60)).padStart(2,"0") + ":" + String(endMinutes % 60).padStart(2,"0") + ":00";
+  const block = await env.DB.prepare(
+    "SELECT id FROM time_blocks WHERE barbershop_id=? AND (barber_id IS NULL OR barber_id=?) AND starts_at<=? AND ends_at>? LIMIT 1"
+  ).bind(shopId, barberId, startsAt, startsAt).first();
+  if (block) return json({ error: "Existe um bloqueio ativo neste momento." }, 409);
+
   let customerId = Number(data.customer_id) || null;
   if (customerId) {
     const customer = await env.DB.prepare(
@@ -313,53 +363,6 @@ async function createWalkInQueue(request, env, shopId) {
       customerId = created.meta.last_row_id;
     }
   }
-
-  let barberId = null, commissionPercent = null, effective = null;
-  if (data.barber_id !== null && data.barber_id !== undefined && data.barber_id !== "") {
-    barberId = Number(data.barber_id);
-    if (!Number.isSafeInteger(barberId) || barberId < 1) return json({ error: "Selecione um profissional válido." }, 400);
-    const barber = await env.DB.prepare(
-      "SELECT id,commission_percent FROM users WHERE id=? AND barbershop_id=? AND is_active=1 AND (role='barber' OR (role='owner' AND can_serve=1))"
-    ).bind(barberId, shopId).first();
-    if (!barber) return json({ error: "Profissional não encontrado ou indisponível." }, 404);
-    commissionPercent = barber.commission_percent || 0;
-    effective = await env.DB.prepare(
-      "SELECT is_open,open_time,close_time,break_start,break_end FROM staff_hours WHERE barbershop_id=? AND user_id=? AND weekday=5"
-    ).bind(shopId, barberId).first();
-  }
-
-  const business = await env.DB.prepare(
-    "SELECT is_open,open_time,close_time,break_start,break_end FROM business_hours WHERE barbershop_id=? AND weekday=5"
-  ).bind(shopId).first();
-  effective = effective || business;
-  const toMinutes = value => {
-    if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
-    const [hour, minute] = value.split(":").map(Number);
-    return hour * 60 + minute;
-  };
-  const nowMinutes = localNow.minutes;
-  const opening = toMinutes(effective?.open_time);
-  const closing = toMinutes(effective?.close_time);
-  if (!business?.is_open || !effective?.is_open || opening === null || closing === null ||
-      nowMinutes < opening || nowMinutes >= closing) {
-    return json({ error: "A barbearia ou o profissional está fora do expediente neste momento." }, 409);
-  }
-  for (const [start, end] of [[business.break_start,business.break_end],[effective.break_start,effective.break_end]]) {
-    const breakStart = toMinutes(start), breakEnd = toMinutes(end);
-    if (breakStart !== null && breakEnd !== null && nowMinutes < breakEnd && nowMinutes + Number(service.duration_minutes) > breakStart) {
-      return json({ error: "A fila está pausada durante o intervalo." }, 409);
-    }
-  }
-  const startsAt = localNow.date + "T" + localNow.time + ":00";
-  const endMinutes = nowMinutes + Number(service.duration_minutes);
-  if (!Number.isSafeInteger(Number(service.duration_minutes)) || endMinutes >= 1440) {
-    return json({ error: "A duração do serviço está inválida." }, 400);
-  }
-  const endsAt = localNow.date + "T" + String(Math.floor(endMinutes / 60)).padStart(2,"0") + ":" + String(endMinutes % 60).padStart(2,"0") + ":00";
-  const block = await env.DB.prepare(
-    "SELECT id FROM time_blocks WHERE barbershop_id=? AND (barber_id IS NULL OR barber_id=?) AND starts_at<=? AND ends_at>? LIMIT 1"
-  ).bind(shopId, barberId, startsAt, startsAt).first();
-  if (block) return json({ error: "Existe um bloqueio ativo neste momento." }, 409);
 
   const result = await env.DB.prepare(
     "INSERT INTO appointments(barbershop_id,customer_id,service_id,barber_id,service_name,price_cents,duration_minutes,starts_at,ends_at,commission_percent,status,booking_type,queue_number) VALUES(?,?,?,?,?,?,?,?,?,?,'scheduled','walk_in',(SELECT COALESCE(MAX(queue_number),0)+1 FROM appointments WHERE barbershop_id=? AND substr(starts_at,1,10)=? AND booking_type='walk_in'))"
