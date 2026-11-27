@@ -160,7 +160,7 @@ def confirm_customer(slug):
         "message": "Cadastro selecionado.",
         "customer": {
             "id": customer["id"],
-            "display_name": mask_customer_name(customer["name"])
+            "display_name": customer["name"]
         },
         "identity_verified": False
     }), 200
