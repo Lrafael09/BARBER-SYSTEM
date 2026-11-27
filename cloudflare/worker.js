@@ -83,6 +83,7 @@ async function api(request, env, url) {
 
     let barbershopId = null;
     let createdNewShop = false;
+    let slug = "";
     try {
       const emailUsed = await env.DB.prepare("SELECT id FROM users WHERE lower(email)=? AND role='owner' LIMIT 1").bind(email).first();
       if (emailUsed) return json({ error: "Este e-mail já possui uma conta. Use outro e-mail ou entre no painel." }, 409);
@@ -94,7 +95,8 @@ async function api(request, env, url) {
       if (phoneUsed) return json({ error: "Este WhatsApp já está vinculado a uma barbearia. Use outro número." }, 409);
       const base = shop.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       if (!base) return json({ error: "Nome inválido para endereço." }, 400);
-      let slug = base, suffix = 2;
+      slug = base;
+      let suffix = 2;
       while (await env.DB.prepare("SELECT id FROM barbershops WHERE slug=? AND id<>?").bind(slug, legacy?.id || 0).first()) slug = base + "-" + suffix++;
       const passwordHash = await hashPassword(pass);
       if (legacy) {
