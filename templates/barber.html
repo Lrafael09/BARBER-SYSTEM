@@ -2,83 +2,89 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#101010"><title>Área do profissional | {{ barbershop_name }}</title>
+<meta name="theme-color" content="#090909"><title>Área do profissional | {{ barbershop_name }}</title>
 <style>
-:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0b0b0b;color:#f5f5f5}
-*{box-sizing:border-box}body{margin:0;padding:26px 16px 50px}main{max-width:850px;margin:auto}
-.brand{font-size:12px;letter-spacing:.16em;color:#a8f05a}h1{font-size:34px;margin:10px 0 5px}
-p{color:#aaa;line-height:1.5}.card{background:#151515;border:1px solid #292929;border-radius:15px;padding:18px;margin:16px 0}
-label{display:block;color:#bbb;font-size:13px;margin:12px 0 6px}
-input,button{width:100%;padding:13px;border-radius:10px;border:1px solid #3b3b3b;background:#0c0c0c;color:white;font:inherit}
-button{background:#a8f05a;color:#111;border:0;font-weight:700;cursor:pointer;margin-top:12px}
-button.secondary{background:#282828;color:#eee;border:1px solid #444}
-.row{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
-.filters{display:flex;gap:8px;flex-wrap:wrap}.filters input{max-width:190px}
-.item{border:1px solid #303030;border-radius:12px;padding:14px;margin:10px 0}
-.meta{font-size:13px;color:#aaa}.status{font-size:12px;color:#a8f05a}
-.actions{display:flex;gap:8px}.actions button{width:auto;flex:1}
-.hidden{display:none}.message{color:#a8f05a;white-space:pre-wrap;margin-top:10px}
-@media(max-width:540px){.actions{flex-direction:column}.actions button{width:100%}}
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#080909;color:#f2f5f2;--accent:#a8f05a;--panel:#121613;--line:#2b332c;--muted:#9ca69d}
+*{box-sizing:border-box}body{margin:0;padding:28px 16px 60px}main{max-width:960px;margin:auto}.brand{font-size:11px;letter-spacing:.18em;color:var(--accent);font-weight:800}h1{font-size:clamp(28px,6vw,38px);margin:8px 0}h2{margin:0 0 8px}p{color:var(--muted);line-height:1.5}.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0}label{display:block;color:#b7c0b8;font-size:13px;margin:12px 0 6px}input,select,button{width:100%;padding:13px;border-radius:10px;border:1px solid #3c453d;background:#0b0f0c;color:#fff;font:inherit}button{background:var(--accent);color:#10140d;border:0;font-weight:800;cursor:pointer;margin-top:12px}button.secondary{background:#252d27;color:#eee;border:1px solid #414b42}button.danger{background:#392323;color:#ffb6b6;border:1px solid #664242}.hidden{display:none!important}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.row button{width:auto}.muted{font-size:13px;color:var(--muted)}.message{color:var(--accent);font-size:13px;min-height:20px;margin-top:9px}.error{color:#ff8b8b}.list{display:grid;gap:10px}.appointment{padding:15px;border:1px solid var(--line);background:#0e130f;border-radius:13px}.appointment strong{font-size:15px}.meta{font-size:13px;color:#aab4ab;margin:5px 0}.status{font-size:11px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.08em}.status.cancelled{color:#e28f8f}.status.completed{color:#a7c7a7}.actions{display:flex;gap:8px}.actions button{flex:1}.date-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.date-tools input{width:auto;max-width:175px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}.stat{background:#0d120e;border:1px solid var(--line);border-radius:12px;padding:12px}.stat span{display:block;color:var(--muted);font-size:11px}.stat strong{font-size:20px;display:block;margin-top:5px}@media(max-width:520px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.card{padding:15px}.actions{flex-direction:column}}
 </style></head>
 <body><main>
-<div class="brand">BARBER-SYSTEM / PROFISSIONAL</div>
-<h1>{{ barbershop_name }}</h1><p>Entre com seu identificador e PIN para consultar sua agenda.</p>
+<header><div class="brand">BARBER-SYSTEM / ÁREA DO COLABORADOR</div><h1>{{ barbershop_name }}</h1><p>Entre com seu nome e seu PIN. Aqui você acompanha somente os atendimentos atribuídos a você.</p></header>
 <section class="card" id="login-card">
-<h2>Entrar</h2>
-<label for="barber-id">Seu identificador</label><input id="barber-id" inputmode="numeric" placeholder="ID fornecido pelo proprietário">
-<label for="pin">PIN de quatro números</label><input id="pin" inputmode="numeric" maxlength="4" type="password" autocomplete="current-password">
-<button id="login">Acessar minha agenda</button><div id="login-message" class="message" role="status"></div>
+ <h2>Acessar minha agenda</h2><p class="muted">Selecione seu nome na lista da barbearia e informe o PIN de quatro números fornecido pelo proprietário.</p>
+ <label for="staff-select">Profissional</label><select id="staff-select"><option value="">Carregando equipe...</option></select>
+ <label for="pin">PIN de acesso</label><input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="••••">
+ <button id="login">Entrar na minha agenda</button><div id="login-message" class="message" role="status"></div>
 </section>
-<section class="hidden" id="agenda">
-<div class="row"><div><h2 id="welcome">Minha agenda</h2><p>Você vê somente os atendimentos atribuídos à sua conta.</p></div><button class="secondary" id="logout" style="width:auto">Sair</button></div>
-<section class="card">
-<div class="filters"><input id="date" type="date"><button id="load" style="width:auto">Consultar</button><button id="today" class="secondary" style="width:auto">Hoje</button></div>
-<div id="appointments"></div><div id="agenda-message" class="message"></div>
-</section>
+<section id="agenda" class="hidden">
+ <div class="row"><div><div class="brand">AGENDA INDIVIDUAL</div><h2 id="welcome">Olá</h2><p class="muted">Seus horários, seus atendimentos. Os outros profissionais não aparecem nesta tela.</p></div><button class="secondary" id="logout">Sair</button></div>
+ <div class="stats" id="stats"></div>
+ <section class="card">
+  <div class="row"><div><h2>Meus atendimentos</h2><p class="muted">Navegue por dia ou consulte uma semana inteira.</p></div>
+   <div class="date-tools"><button class="secondary" id="prev-week">‹</button><input id="date" type="date"><button class="secondary" id="next-week">›</button><button class="secondary" id="today">Hoje</button></div>
+  </div>
+  <label for="status-filter">Status</label><select id="status-filter"><option value="">Todos</option><option value="scheduled">Agendados</option><option value="completed">Concluídos</option><option value="cancelled">Cancelados</option></select>
+  <div id="appointments" class="list" style="margin-top:14px"></div><div id="agenda-message" class="message"></div>
+ </section>
 </section>
 </main>
 <script>
 (() => {
 const slug={{ barbershop_slug|tojson }};
 const $=id=>document.getElementById(id);
-let logged=false;
-async function loadAppointments(){
- const params=new URLSearchParams();
- if($('date').value)params.set('date',$('date').value);
- const response=await fetch('/barber/appointments?'+params.toString());
- const data=await response.json();
- if(!response.ok)throw new Error(data.error||'Não foi possível carregar a agenda.');
- const root=$('appointments');root.replaceChildren();
- if(!data.appointments.length){$('agenda-message').textContent='Nenhum atendimento encontrado para essa data.';return;}
- $('agenda-message').textContent='';
- data.appointments.forEach(a=>{
-  const card=document.createElement('article');card.className='item';
-  const title=document.createElement('strong');title.textContent=a.customer_name+' — '+a.service_name;card.appendChild(title);
-  const time=document.createElement('p');time.className='meta';time.textContent=a.starts_at.replace('T',' ').slice(0,16)+' até '+a.ends_at.slice(11,16)+' • '+a.duration_minutes+' min';card.appendChild(time);
-  const status=document.createElement('div');status.className='status';status.textContent='Status: '+({scheduled:'Agendado',completed:'Concluído',cancelled:'Cancelado'}[a.status]||a.status);card.appendChild(status);
-  if(a.status==='scheduled'){
-   const actions=document.createElement('div');actions.className='actions';
-   const done=document.createElement('button');done.textContent='Concluir atendimento';
-   done.addEventListener('click',async()=>{const r=await fetch('/barber/appointments/'+a.id+'/complete',{method:'POST'});const d=await r.json();if(!r.ok){$('agenda-message').textContent=d.error||'Erro';return;}loadAppointments();});
-   const cancel=document.createElement('button');cancel.className='secondary';cancel.textContent='Cancelar';
-   cancel.addEventListener('click',async()=>{const reason=prompt('Informe o motivo do cancelamento:');if(!reason)return;const r=await fetch('/barber/appointments/'+a.id+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})});const d=await r.json();if(!r.ok){$('agenda-message').textContent=d.error||'Erro';return;}loadAppointments();});
-   actions.append(done,cancel);card.appendChild(actions);
-  }
-  root.appendChild(card);
- });
+let loggedName='';
+function today(){const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);}
+function shift(value,n){const d=new Date(value+'T12:00:00');d.setDate(d.getDate()+n);return d.toLocaleDateString('en-CA');}
+async function api(path,options={}){const headers={...(options.headers||{})};if(options.body)headers['Content-Type']='application/json';const r=await fetch(path,{...options,headers});let d={};try{d=await r.json();}catch(_){}if(!r.ok)throw new Error(d.error||'Não foi possível concluir.');return d;}
+function message(text,error=false){$('agenda-message').textContent=text||'';$('agenda-message').classList.toggle('error',error);}
+async function loadStaff(){
+ const data=await api('/barber/'+encodeURIComponent(slug)+'/staff');const select=$('staff-select');select.replaceChildren(new Option('Selecione seu nome',''));
+ data.staff.forEach(s=>select.add(new Option(s.name+(s.role==='owner'?' · Proprietário':''),s.id)));
+ if(!data.staff.length)message('A barbearia ainda não liberou profissionais para receber agendamentos.',true);
 }
 $('login').addEventListener('click',async()=>{
- const id=Number($('barber-id').value),pin=$('pin').value;
- if(!Number.isInteger(id)||id<1||!/^\d{4}$/.test(pin)){$('login-message').textContent='Informe um ID válido e PIN com quatro números.';return;}
+ const barberId=Number($('staff-select').value),pin=$('pin').value;
+ if(!barberId||!/^\d{4}$/.test(pin)){$('login-message').textContent='Selecione seu nome e informe o PIN com quatro números.';return;}
+ $('login').disabled=true;
  try{
-  const response=await fetch('/barber/'+encodeURIComponent(slug)+'/'+id+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
-  const data=await response.json();if(!response.ok)throw new Error(data.error||'Falha no login.');
-  logged=true;$('login-card').classList.add('hidden');$('agenda').classList.remove('hidden');$('welcome').textContent='Olá, '+data.barber.name;
-  $('date').value=new Date().toLocaleDateString('en-CA');await loadAppointments();
- }catch(error){$('login-message').textContent=error.message;}
+  const data=await api('/barber/'+encodeURIComponent(slug)+'/login',{method:'POST',body:JSON.stringify({barber_id:barberId,pin})});
+  loggedName=data.barber.name;$('welcome').textContent='Olá, '+loggedName;
+  $('login-card').classList.add('hidden');$('agenda').classList.remove('hidden');$('date').value=today();$('pin').value='';
+  await loadAppointments();
+ }catch(e){$('login-message').textContent=e.message;}
+ finally{$('login').disabled=false;}
 });
-$('load').addEventListener('click',()=>loadAppointments().catch(e=>$('agenda-message').textContent=e.message));
-$('today').addEventListener('click',()=>{$('date').value=new Date().toLocaleDateString('en-CA');loadAppointments().catch(e=>$('agenda-message').textContent=e.message);});
-$('logout').addEventListener('click',async()=>{await fetch('/barber/logout',{method:'POST'});logged=false;$('agenda').classList.add('hidden');$('login-card').classList.remove('hidden');$('pin').value='';});
+async function loadAppointments(){
+ const selected=$('date').value||today();const monday=new Date(selected+'T12:00:00');monday.setDate(monday.getDate()-((monday.getDay()+6)%7));
+ const from=monday.toLocaleDateString('en-CA');const end=new Date(monday);end.setDate(end.getDate()+6);const to=end.toLocaleDateString('en-CA');
+ const q=new URLSearchParams({from,to});if($('status-filter').value)q.set('status',$('status-filter').value);
+ const data=await api('/barber/appointments?'+q.toString());
+ const root=$('appointments');root.replaceChildren();
+ const counts={scheduled:0,completed:0,cancelled:0};data.appointments.forEach(a=>counts[a.status]=(counts[a.status]||0)+1);
+ $('stats').replaceChildren();
+ [['Pendentes',counts.scheduled],['Concluídos',counts.completed],['Total na semana',data.appointments.length]].forEach(([label,value])=>{const d=document.createElement('div');d.className='stat';const s=document.createElement('span');s.textContent=label;const b=document.createElement('strong');b.textContent=value;d.append(s,b);$('stats').append(d);});
+ if(!data.appointments.length){const e=document.createElement('div');e.className='appointment muted';e.textContent='Nenhum atendimento encontrado nesta semana.';root.append(e);}
+ data.appointments.forEach(a=>{
+  const card=document.createElement('article');card.className='appointment';
+  const title=document.createElement('strong');title.textContent=a.customer_name+' — '+a.service_name;
+  const meta=document.createElement('div');meta.className='meta';meta.textContent=new Date(a.starts_at.replace(' ','T')).toLocaleDateString('pt-BR')+' · '+a.starts_at.slice(11,16)+' até '+a.ends_at.slice(11,16)+' · '+a.duration_minutes+' min · '+('R$ '+(a.price_cents/100).toFixed(2).replace('.',','));
+  const status=document.createElement('div');status.className='status '+a.status;status.textContent={scheduled:'Agendado',completed:'Concluído',cancelled:'Cancelado'}[a.status]||a.status;
+  card.append(title,meta,status);
+  if(a.status==='scheduled'){
+   const actions=document.createElement('div');actions.className='actions';
+   const done=document.createElement('button');done.textContent='Concluir atendimento';done.addEventListener('click',async()=>{try{await api('/barber/appointments/'+a.id+'/complete',{method:'POST'});await loadAppointments();}catch(e){message(e.message,true);}});
+   const cancel=document.createElement('button');cancel.className='danger';cancel.textContent='Cancelar';cancel.addEventListener('click',async()=>{const reason=prompt('Informe o motivo do cancelamento:');if(!reason)return;try{await api('/barber/appointments/'+a.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});await loadAppointments();}catch(e){message(e.message,true);}});
+   actions.append(done,cancel);card.append(actions);
+  }
+  root.append(card);
+ });
+ message('Exibindo '+data.appointments.length+' atendimento(s) da semana de '+from+' a '+to+'.');
+}
+$('date').addEventListener('change',()=>loadAppointments().catch(e=>message(e.message,true)));
+$('status-filter').addEventListener('change',()=>loadAppointments().catch(e=>message(e.message,true)));
+$('prev-week').addEventListener('click',()=>{$('date').value=shift($('date').value,-7);loadAppointments().catch(e=>message(e.message,true));});
+$('next-week').addEventListener('click',()=>{$('date').value=shift($('date').value,7);loadAppointments().catch(e=>message(e.message,true));});
+$('today').addEventListener('click',()=>{$('date').value=today();loadAppointments().catch(e=>message(e.message,true));});
+$('logout').addEventListener('click',async()=>{try{await api('/barber/logout',{method:'POST'});}finally{$('agenda').classList.add('hidden');$('login-card').classList.remove('hidden');$('pin').value='';$('staff-select').value='';}});
+loadStaff().catch(e=>$('login-message').textContent=e.message);
 })();
 </script></body></html>
