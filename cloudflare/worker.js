@@ -2,6 +2,7 @@ import { hashPassword, verifyPassword, needsPasswordRehash } from "./passwords.j
 import { handlePublicApi } from "./public.js";
 import { handleBarberApi } from "./barber.js";
 import { handleAdminApi } from "./admin.js";
+import { ADMIN_PAGE, BARBER_PAGE, BOOKING_PAGE } from "./pages.js";
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
   status,
@@ -152,30 +153,30 @@ export default {
       } catch (error) {
         response = json({ error: "Erro interno.", detail: env.ENVIRONMENT === "development" ? error.message : undefined }, 500);
       }
-    } else if (env.ASSETS) {
-      if (request.method === "GET" && ["/", "/admin", "/admin/"].includes(url.pathname)) {
+    } else if (request.method === "GET") {
+      const html = (value) => new Response(value, {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" }
+      });
+      if (url.pathname === "/" || url.pathname === "/admin" || url.pathname === "/admin/") {
         response = Response.redirect(new URL("/admin/panel", url), 302);
-      } else if (request.method === "GET" && (url.pathname === "/admin/panel" || url.pathname === "/admin/panel/")) {
+      } else if (url.pathname === "/admin/panel" || url.pathname === "/admin/panel/") {
         const currentSession = await readSession(request, env);
         if (currentSession?.role === "barber") {
           response = Response.redirect(new URL("/barber/" + currentSession.barbershop_slug, url), 303);
         } else {
-          const target = new URL("/admin/panel/index.html", url);
-          response = await env.ASSETS.fetch(new Request(target, request));
+          response = html(ADMIN_PAGE);
         }
-      } else if (request.method === "GET" && /^\/barber\/[a-z0-9-]+$/.test(url.pathname)) {
-        const slug = url.pathname.split("/")[2];
-        const target = new URL("/barber.html?slug=" + encodeURIComponent(slug), url);
-        response = await env.ASSETS.fetch(new Request(target, request));
-      } else if (request.method === "GET" && /^\/b\/[a-z0-9-]+\/book$/.test(url.pathname)) {
-        const slug = url.pathname.split("/")[2];
-        const target = new URL("/booking.html?slug=" + encodeURIComponent(slug), url);
-        response = await env.ASSETS.fetch(new Request(target, request));
+      } else if (url.pathname === "/admin/panel/index.html") {
+        response = html(ADMIN_PAGE);
+      } else if (/^\\/barber\\/[a-z0-9-]+$/.test(url.pathname)) {
+        response = html(BARBER_PAGE);
+      } else if (/^\\/b\\/[a-z0-9-]+\\/book$/.test(url.pathname)) {
+        response = html(BOOKING_PAGE);
       } else {
-        response = await env.ASSETS.fetch(request);
+        response = new Response("Página não encontrada.", { status: 404 });
       }
     } else {
-      response = new Response("Barber System - interface em migração.", { status: 200 });
+      response = new Response("Método não permitido.", { status: 405 });
     }
     return cors(response, request.headers.get("Origin"));
   }
