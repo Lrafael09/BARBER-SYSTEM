@@ -32,9 +32,7 @@ def create_app(test_config=None):
         MAX_CONTENT_LENGTH=1024 * 1024
     )
 
-    if test_config:
-        app.config.update(test_config)
-
+    # Permite iniciar uma base separada para testes locais sem tocar nos dados reais.\n    database_override = os.environ.get("BARBER_DATABASE")\n    if database_override:\n        app.config["DATABASE"] = database_override\n\n    if test_config:\n        app.config.update(test_config)\n
     if os.environ.get("APP_ENV") == "production" and (
         not os.environ.get("SECRET_KEY")
         or app.config["SECRET_KEY"] == "chave-local-apenas-para-desenvolvimento"
