@@ -72,16 +72,17 @@ async function getBarberAppointment(env, session, appointmentId, statuses = null
   ).bind(appointmentId, session.barbershop_id, session.user_id).first();
 }
 
-async function completeAppointment(env, session, appointmentId) {
+async function completeAppointment(env, session, appointmentId, allowAnyStatus = false) {
+  const statusFilter = allowAnyStatus ? "" : " AND a.status='scheduled'";
   const appointment = await env.DB.prepare(
-    "SELECT a.id,a.service_name,a.price_cents,a.starts_at,a.commission_percent,u.commission_percent AS current_commission_percent FROM appointments a JOIN users u ON u.id=a.barber_id AND u.barbershop_id=a.barbershop_id WHERE a.id=? AND a.barbershop_id=? AND a.barber_id=? AND a.status='scheduled'"
+    "SELECT a.id,a.service_name,a.price_cents,a.starts_at,a.commission_percent,u.commission_percent AS current_commission_percent FROM appointments a JOIN users u ON u.id=a.barber_id AND u.barbershop_id=a.barbershop_id WHERE a.id=? AND a.barbershop_id=? AND a.barber_id=?" + statusFilter
   ).bind(appointmentId, session.barbershop_id, session.user_id).first();
   if (!appointment) return json({ error: "Atendimento ativo não encontrado na sua agenda." }, 404);
   const percent = appointment.commission_percent ?? appointment.current_commission_percent ?? 0;
   const cents = commissionCents(appointment.price_cents, percent);
   await env.DB.batch([
     env.DB.prepare(
-      "UPDATE appointments SET status='completed',commission_percent=?,commission_cents=? WHERE id=? AND barbershop_id=? AND barber_id=? AND status='scheduled'"
+      "UPDATE appointments SET status='completed',cancellation_reason=NULL,cancelled_at=NULL,commission_percent=?,commission_cents=? WHERE id=? AND barbershop_id=? AND barber_id=?"
     ).bind(percent, cents, appointmentId, session.barbershop_id, session.user_id),
     env.DB.prepare(
       "INSERT OR IGNORE INTO finance_entries(barbershop_id,entry_type,description,category,amount_cents,entry_date,appointment_id) VALUES(?,'income',?,'Atendimentos',?,date(?),?)"
@@ -108,12 +109,19 @@ async function updateAppointmentStatus(request, env, session, appointmentId) {
   if (!data || typeof data !== "object") return json({ error: "Informe o novo status." }, 400);
   const status = data.status;
   if (!["scheduled", "completed", "cancelled"].includes(status)) return json({ error: "Status inválido." }, 400);
-  if (status === "completed") return completeAppointment(env, session, appointmentId);
-  if (status === "cancelled") return cancelAppointment(request, env, session, appointmentId);
-
   const appointment = await getBarberAppointment(env, session, appointmentId);
   if (!appointment) return json({ error: "Atendimento não encontrado na sua agenda." }, 404);
-  if (appointment.status === "scheduled") return json({ message: "O atendimento já está com esse status." });
+  if (appointment.status === status) return json({ message: "O atendimento já está com esse status." });
+  if (status === "completed") return completeAppointment(env, session, appointmentId, true);
+  if (status === "cancelled") {
+    const reason = String(data.reason || "").trim();
+    if (!reason || reason.length > 250) return json({ error: "Informe o motivo do cancelamento (até 250 caracteres)." }, 400);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE appointments SET status='cancelled',cancellation_reason=?,cancelled_at=CURRENT_TIMESTAMP,commission_cents=0 WHERE id=? AND barbershop_id=? AND barber_id=?").bind(reason, appointmentId, session.barbershop_id, session.user_id),
+      env.DB.prepare("DELETE FROM finance_entries WHERE appointment_id=? AND barbershop_id=?").bind(appointmentId, session.barbershop_id)
+    ]);
+    return json({ message: "Status do atendimento atualizado com sucesso." });
+  }
   try {
     await env.DB.batch([
       env.DB.prepare(
@@ -323,7 +331,7 @@ export async function handleBarberApi(request, env, url) {
     data.barber_id = session.user_id;
     const forwardedRequest = new Request(request.url, {
       method: "POST",
-      headers: request.headers,
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(data)
     });
     const forwarded = new URL(url);
