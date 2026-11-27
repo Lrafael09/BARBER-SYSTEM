@@ -379,6 +379,11 @@ def create_appointment(slug):
             """,
             (barbershop["id"], barber_id, weekday)
         ).fetchone()
+        staff_break = db.execute(
+            """SELECT break_start, break_end FROM staff_breaks
+               WHERE barbershop_id = ? AND user_id = ? AND weekday = ?""",
+            (barbershop["id"], barber_id, weekday)
+        ).fetchone()
         effective_hours = personal_hours if personal_hours is not None else hours
 
         if (
@@ -391,7 +396,7 @@ def create_appointment(slug):
             db.rollback()
             return jsonify({"error": "Esse horário está fora do expediente da barbearia ou do profissional."}), 409
 
-        for schedule in (hours, personal_hours):
+        for schedule in (hours, personal_hours, staff_break):
             if schedule is not None and schedule["break_start"]:
                 if start_clock < schedule["break_end"] and end_clock > schedule["break_start"]:
                     db.rollback()
@@ -643,6 +648,11 @@ def public_availability(slug):
         """,
         (barbershop["id"], barber_id, day.weekday())
     ).fetchone()
+    staff_break = db.execute(
+        """SELECT break_start, break_end FROM staff_breaks
+           WHERE barbershop_id = ? AND user_id = ? AND weekday = ?""",
+        (barbershop["id"], barber_id, day.weekday())
+    ).fetchone()
     hours = personal_hours if personal_hours is not None else business_hours
 
     if (business_hours is None or not business_hours["is_open"]
@@ -713,20 +723,17 @@ def public_availability(slug):
             and candidate < break_end
             and candidate_end > break_start
         )
-        if personal_hours is not None:
-            personal_break_start = (
-                datetime.combine(day, datetime.strptime(personal_hours["break_start"], "%H:%M").time())
-                if personal_hours["break_start"] else None
-            )
-            personal_break_end = (
-                datetime.combine(day, datetime.strptime(personal_hours["break_end"], "%H:%M").time())
-                if personal_hours["break_end"] else None
-            )
-            overlaps_break = overlaps_break or (
-                personal_break_start is not None
-                and candidate < personal_break_end
-                and candidate_end > personal_break_start
-            )
+        for extra_break in (personal_hours, staff_break):
+            if extra_break is not None and extra_break["break_start"]:
+                extra_start = datetime.combine(
+                    day, datetime.strptime(extra_break["break_start"], "%H:%M").time()
+                )
+                extra_end = datetime.combine(
+                    day, datetime.strptime(extra_break["break_end"], "%H:%M").time()
+                )
+                overlaps_break = overlaps_break or (
+                    candidate < extra_end and candidate_end > extra_start
+                )
         # O horário individual não amplia o expediente geral da barbearia.
         business_open = datetime.combine(day, datetime.strptime(business_hours["open_time"], "%H:%M").time())
         business_close = datetime.combine(day, datetime.strptime(business_hours["close_time"], "%H:%M").time())
