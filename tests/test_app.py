@@ -241,6 +241,13 @@ class BarberSystemTests(unittest.TestCase):
         staff_id = created.get_json()["barber"]["id"]
         self.assertEqual(created.get_json()["barber"]["commission_percent"], 40.0)
 
+        customer = self.client.post(f"/b/{slug}/customers", json={
+            "name": "Cliente Administrado",
+            "phone": "11987654321",
+        })
+        self.assertEqual(customer.status_code, 201, customer.get_json())
+        customer_id = customer.get_json()["customer"]["id"]
+
         login = self.client.post("/barber/barbearia-teste/login", json={
             "barber_id": staff_id, "pin": "4321",
         })
@@ -266,13 +273,6 @@ class BarberSystemTests(unittest.TestCase):
         self.assertNotIn("phone", str(staff_customers.get_json()))
 
         today = date.today()
-        customer = self.client.post(f"/b/{slug}/customers", json={
-            "name": "Cliente Administrado",
-            "phone": "11987654321",
-        })
-        self.assertEqual(customer.status_code, 201, customer.get_json())
-        customer_id = customer.get_json()["customer"]["id"]
-
         lunch_days = [{
             "weekday": weekday,
             "break_start": "13:00" if weekday == today.weekday() else None,
