@@ -7,7 +7,10 @@ informando seu identificador e PIN de quatro dígitos.
 As tentativas são limitadas e registradas no banco.
 """
 
+import re
 import time
+from datetime import date, datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 
 from flask import Blueprint, jsonify, request, session, render_template
@@ -72,7 +75,7 @@ def login_barber(slug, barber_id):
     barber = db.execute(
         """
         SELECT users.id, users.barbershop_id, users.name, users.pin_hash,
-               barbershops.slug
+               users.commission_percent, barbershops.slug
         FROM users
         INNER JOIN barbershops
             ON barbershops.id = users.barbershop_id
@@ -166,7 +169,8 @@ def login_barber(slug, barber_id):
         "barber": {
             "id": barber["id"],
             "name": barber["name"],
-            "role": "barber"
+            "role": "barber",
+            "commission_percent": barber["commission_percent"]
         },
         "barbershop": {
             "slug": barber["slug"]
@@ -181,7 +185,7 @@ def current_barber():
 
     barber = get_db().execute(
         """
-        SELECT id, barbershop_id, name, role
+        SELECT id, barbershop_id, name, role, commission_percent
         FROM users
         WHERE id = ? AND barbershop_id = ?
         """,
@@ -192,7 +196,8 @@ def current_barber():
         "id": barber["id"],
         "barbershop_id": barber["barbershop_id"],
         "name": barber["name"],
-        "role": barber["role"]
+        "role": barber["role"],
+        "commission_percent": barber["commission_percent"]
     }), 200
 
 
@@ -294,6 +299,410 @@ def barber_appointments():
     }), 200
 
 
+
+def _phone_digits(value):
+    return re.sub(r"\D", "", str(value or ""))
+
+
+def _clock_value(value, field_name):
+    try:
+        return datetime.strptime(str(value), "%H:%M").strftime("%H:%M")
+    except (TypeError, ValueError):
+        raise ValueError(field_name + " deve usar HH:MM.")
+
+
+def _staff_hours_for_day(db, barbershop_id, user_id, weekday):
+    business = db.execute(
+        """SELECT is_open, open_time, close_time, break_start, break_end
+           FROM business_hours WHERE barbershop_id = ? AND weekday = ?""",
+        (barbershop_id, weekday)
+    ).fetchone()
+    personal = db.execute(
+        """SELECT is_open, open_time, close_time, break_start, break_end
+           FROM staff_hours WHERE barbershop_id = ? AND user_id = ? AND weekday = ?""",
+        (barbershop_id, user_id, weekday)
+    ).fetchone()
+    return business, personal, personal if personal is not None else business
+
+
+@barber_bp.route("/services", methods=["GET"])
+@barber_required
+def barber_services():
+    """Lista os serviços ativos para agendamentos feitos pelo profissional."""
+    rows = get_db().execute(
+        """SELECT id, name, price_cents, duration_minutes
+           FROM services
+           WHERE barbershop_id = ? AND is_active = 1
+           ORDER BY name COLLATE NOCASE""",
+        (session["barbershop_id"],)
+    ).fetchall()
+    return jsonify({"services": [dict(row) for row in rows]}), 200
+
+
+@barber_bp.route("/availability", methods=["GET"])
+@barber_required
+def barber_availability():
+    """Calcula horários livres apenas para o profissional autenticado."""
+    try:
+        service_id = int(request.args.get("service_id", ""))
+        selected_day = date.fromisoformat(request.args.get("date", ""))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Informe um serviço e uma data válida."}), 400
+
+    db = get_db()
+    service = db.execute(
+        """SELECT duration_minutes FROM services
+           WHERE id = ? AND barbershop_id = ? AND is_active = 1""",
+        (service_id, session["barbershop_id"])
+    ).fetchone()
+    if service is None:
+        return jsonify({"error": "Serviço não encontrado ou inativo."}), 404
+
+    business, personal, effective = _staff_hours_for_day(
+        db, session["barbershop_id"], session["user_id"], selected_day.weekday()
+    )
+    if (business is None or not business["is_open"]
+            or effective is None or not effective["is_open"]):
+        return jsonify({"date": selected_day.isoformat(), "slots": []}), 200
+
+    opening = datetime.combine(selected_day, datetime.strptime(effective["open_time"], "%H:%M").time())
+    closing = datetime.combine(selected_day, datetime.strptime(effective["close_time"], "%H:%M").time())
+    duration = timedelta(minutes=service["duration_minutes"])
+    day_start = f"{selected_day.isoformat()}T00:00:00"
+    day_end = f"{selected_day.isoformat()}T23:59:59"
+
+    blocks = db.execute(
+        """SELECT starts_at, ends_at FROM time_blocks
+           WHERE barbershop_id = ? AND (barber_id IS NULL OR barber_id = ?)
+             AND starts_at < ? AND ends_at > ?""",
+        (session["barbershop_id"], session["user_id"], day_end, day_start)
+    ).fetchall()
+    appointments = db.execute(
+        """SELECT starts_at, ends_at FROM appointments
+           WHERE barbershop_id = ? AND barber_id = ? AND status = 'scheduled'
+             AND starts_at < ? AND ends_at > ?""",
+        (session["barbershop_id"], session["user_id"], day_end, day_start)
+    ).fetchall()
+    occupied = [
+        (datetime.fromisoformat(row["starts_at"]), datetime.fromisoformat(row["ends_at"]))
+        for row in list(blocks) + list(appointments)
+    ]
+
+    breaks = []
+    for schedule in (business, personal):
+        if schedule is not None and schedule["break_start"] and schedule["break_end"]:
+            breaks.append((
+                datetime.combine(selected_day, datetime.strptime(schedule["break_start"], "%H:%M").time()),
+                datetime.combine(selected_day, datetime.strptime(schedule["break_end"], "%H:%M").time())
+            ))
+
+    business_open = datetime.combine(selected_day, datetime.strptime(business["open_time"], "%H:%M").time())
+    business_close = datetime.combine(selected_day, datetime.strptime(business["close_time"], "%H:%M").time())
+    slots = []
+    candidate = opening
+    while candidate + duration <= closing:
+        candidate_end = candidate + duration
+        inside_business = candidate >= business_open and candidate_end <= business_close
+        overlaps_break = any(candidate < break_end and candidate_end > break_start for break_start, break_end in breaks)
+        overlaps_busy = any(candidate < busy_end and candidate_end > busy_start for busy_start, busy_end in occupied)
+        if inside_business and not overlaps_break and not overlaps_busy:
+            slots.append(candidate.strftime("%H:%M"))
+        candidate += timedelta(minutes=15)
+
+    return jsonify({"date": selected_day.isoformat(), "slots": slots}), 200
+
+
+@barber_bp.route("/appointments", methods=["POST"])
+@barber_required
+def create_barber_appointment():
+    """Permite ao profissional cadastrar um cliente e reservar um serviço na própria agenda."""
+    from datetime import datetime
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Informe os dados do agendamento."}), 400
+
+    name = str(data.get("customer_name", "")).strip()
+    phone = _phone_digits(data.get("customer_phone", ""))
+    if not name or len(name) > 120:
+        return jsonify({"error": "Informe o nome do cliente."}), 400
+    if not 10 <= len(phone) <= 13:
+        return jsonify({"error": "Informe um telefone válido com DDD."}), 400
+
+    try:
+        service_id = int(data.get("service_id"))
+        starts_value = data.get("starts_at")
+        if not isinstance(starts_value, str):
+            raise ValueError
+        starts = datetime.fromisoformat(starts_value)
+        if starts.tzinfo is not None or starts.second or starts.microsecond:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": "Selecione um serviço e um horário válido."}), 400
+
+    db = get_db()
+    shop_id = session["barbershop_id"]
+    user_id = session["user_id"]
+
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        service = db.execute(
+            """SELECT id, name, price_cents, duration_minutes
+               FROM services WHERE id = ? AND barbershop_id = ? AND is_active = 1""",
+            (service_id, shop_id)
+        ).fetchone()
+        professional = db.execute(
+            """SELECT commission_percent FROM users
+               WHERE id = ? AND barbershop_id = ? AND is_active = 1""",
+            (user_id, shop_id)
+        ).fetchone()
+        if service is None or professional is None:
+            db.rollback()
+            return jsonify({"error": "Serviço ou profissional indisponível."}), 404
+
+        ends = starts + timedelta(minutes=service["duration_minutes"])
+        if ends.date() != starts.date():
+            db.rollback()
+            return jsonify({"error": "O serviço precisa terminar no mesmo dia."}), 409
+
+        business, personal, effective = _staff_hours_for_day(db, shop_id, user_id, starts.weekday())
+        start_clock, end_clock = starts.strftime("%H:%M"), ends.strftime("%H:%M")
+        if (business is None or not business["is_open"]
+                or effective is None or not effective["is_open"]
+                or start_clock < business["open_time"] or end_clock > business["close_time"]
+                or start_clock < effective["open_time"] or end_clock > effective["close_time"]):
+            db.rollback()
+            return jsonify({"error": "Esse horário está fora do expediente."}), 409
+
+        for schedule in (business, personal):
+            if (schedule is not None and schedule["break_start"] and schedule["break_end"]
+                    and start_clock < schedule["break_end"] and end_clock > schedule["break_start"]):
+                db.rollback()
+                return jsonify({"error": "Esse horário coincide com o intervalo."}), 409
+
+        starts_text = starts.strftime("%Y-%m-%dT%H:%M:%S")
+        ends_text = ends.strftime("%Y-%m-%dT%H:%M:%S")
+        block = db.execute(
+            """SELECT id FROM time_blocks
+               WHERE barbershop_id = ? AND (barber_id IS NULL OR barber_id = ?)
+                 AND starts_at < ? AND ends_at > ? LIMIT 1""",
+            (shop_id, user_id, ends_text, starts_text)
+        ).fetchone()
+        if block:
+            db.rollback()
+            return jsonify({"error": "Você ou a barbearia está indisponível nesse horário."}), 409
+
+        conflict = db.execute(
+            """SELECT id FROM appointments
+               WHERE barbershop_id = ? AND barber_id = ? AND status = 'scheduled'
+                 AND starts_at < ? AND ends_at > ? LIMIT 1""",
+            (shop_id, user_id, ends_text, starts_text)
+        ).fetchone()
+        if conflict:
+            db.rollback()
+            return jsonify({"error": "Esse horário acabou de ser ocupado. Escolha outro."}), 409
+
+        customer = db.execute(
+            "SELECT id FROM customers WHERE barbershop_id = ? AND phone = ?",
+            (shop_id, phone)
+        ).fetchone()
+        if customer is None:
+            cursor = db.execute(
+                """INSERT INTO customers (barbershop_id, name, phone, phone_last4)
+                   VALUES (?, ?, ?, ?)""",
+                (shop_id, name, phone, phone[-4:])
+            )
+            customer_id = cursor.lastrowid
+        else:
+            customer_id = customer["id"]
+
+        cursor = db.execute(
+            """INSERT INTO appointments (
+                   barbershop_id, customer_id, service_id, barber_id,
+                   service_name, price_cents, duration_minutes, starts_at, ends_at,
+                   commission_percent, status
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')""",
+            (shop_id, customer_id, service_id, user_id, service["name"],
+             service["price_cents"], service["duration_minutes"], starts_text,
+             ends_text, professional["commission_percent"])
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return jsonify({
+        "message": "Agendamento criado com sucesso.",
+        "appointment": {
+            "id": cursor.lastrowid,
+            "customer_name": name if customer is None else None,
+            "service_name": service["name"],
+            "price_cents": service["price_cents"],
+            "duration_minutes": service["duration_minutes"],
+            "starts_at": starts_text,
+            "ends_at": ends_text,
+            "status": "scheduled"
+        }
+    }), 201
+
+
+@barber_bp.route("/schedule", methods=["GET"])
+@barber_required
+def get_barber_schedule():
+    """Retorna o expediente efetivo e a pausa configurada pelo profissional."""
+    db = get_db()
+    business_rows = db.execute(
+        """SELECT weekday, is_open, open_time, close_time, break_start, break_end
+           FROM business_hours WHERE barbershop_id = ? ORDER BY weekday""",
+        (session["barbershop_id"],)
+    ).fetchall()
+    personal_rows = db.execute(
+        """SELECT weekday, is_open, open_time, close_time, break_start, break_end
+           FROM staff_hours WHERE barbershop_id = ? AND user_id = ? ORDER BY weekday""",
+        (session["barbershop_id"], session["user_id"])
+    ).fetchall()
+    business = {row["weekday"]: dict(row) for row in business_rows}
+    personal = {row["weekday"]: dict(row) for row in personal_rows}
+    days = []
+    for weekday in range(7):
+        base = business.get(weekday, {
+            "weekday": weekday, "is_open": False, "open_time": None,
+            "close_time": None, "break_start": None, "break_end": None
+        })
+        own = personal.get(weekday)
+        effective = own if own is not None else base
+        days.append({
+            "weekday": weekday,
+            "is_open": bool(effective["is_open"]),
+            "open_time": effective["open_time"],
+            "close_time": effective["close_time"],
+            "break_start": (own["break_start"] if own and own["break_start"] else base["break_start"]),
+            "break_end": (own["break_end"] if own and own["break_end"] else base["break_end"]),
+            "has_personal_schedule": own is not None,
+            "business_break_start": base["break_start"],
+            "business_break_end": base["break_end"]
+        })
+    return jsonify({"days": days}), 200
+
+
+@barber_bp.route("/schedule", methods=["PUT"])
+@barber_required
+def update_barber_lunch_breaks():
+    """Permite ao profissional configurar sua pausa semanal sem alterar o expediente-base."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("days"), list) or len(data["days"]) != 7:
+        return jsonify({"error": "Envie a pausa dos sete dias da semana."}), 400
+
+    db = get_db()
+    shop_id, user_id = session["barbershop_id"], session["user_id"]
+    seen, normalized = set(), []
+    try:
+        for item in data["days"]:
+            if not isinstance(item, dict):
+                raise ValueError("Dados de dia inválidos.")
+            weekday = item.get("weekday")
+            if isinstance(weekday, bool) or not isinstance(weekday, int) or weekday not in range(7) or weekday in seen:
+                raise ValueError("Cada dia deve aparecer uma única vez.")
+            seen.add(weekday)
+
+            business, own, effective = _staff_hours_for_day(db, shop_id, user_id, weekday)
+            if business is None or not business["is_open"] or effective is None or not effective["is_open"]:
+                if item.get("break_start") or item.get("break_end"):
+                    raise ValueError("Não é possível definir almoço em um dia sem expediente.")
+                normalized.append((weekday, effective, None, None))
+                continue
+
+            start = item.get("break_start") or None
+            end = item.get("break_end") or None
+            if (start is None) != (end is None):
+                raise ValueError("Informe início e fim do almoço, ou deixe os dois vazios.")
+            if start is not None:
+                start = _clock_value(start, "Início do almoço")
+                end = _clock_value(end, "Fim do almoço")
+                opening, closing = effective["open_time"], effective["close_time"]
+                if not opening < start < end < closing:
+                    raise ValueError("O almoço precisa ficar dentro do seu expediente.")
+                # Não permite criar pausa recorrente sobre atendimentos já reservados.
+                bookings = db.execute(
+                    """SELECT starts_at, ends_at FROM appointments
+                       WHERE barbershop_id = ? AND barber_id = ? AND status = 'scheduled'
+                         AND starts_at >= ?""",
+                    (shop_id, user_id, datetime.now().strftime("%Y-%m-%dT00:00:00"))
+                ).fetchall()
+                for booking in bookings:
+                    booking_start = datetime.fromisoformat(booking["starts_at"])
+                    booking_end = datetime.fromisoformat(booking["ends_at"])
+                    if booking_start.weekday() == weekday:
+                        if booking_start.strftime("%H:%M") < end and booking_end.strftime("%H:%M") > start:
+                            raise ValueError("Já existe um agendamento futuro nesse horário de almoço. Ajuste ou remarque primeiro.")
+            normalized.append((weekday, effective, start, end))
+    except (ValueError, TypeError, AttributeError) as error:
+        return jsonify({"error": str(error)}), 400
+
+    for weekday, effective, start, end in normalized:
+        if effective is None:
+            continue
+        db.execute(
+            """INSERT INTO staff_hours (
+                   barbershop_id, user_id, weekday, is_open, open_time, close_time,
+                   break_start, break_end
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(barbershop_id, user_id, weekday) DO UPDATE SET
+                   break_start = excluded.break_start,
+                   break_end = excluded.break_end""",
+            (shop_id, user_id, weekday, int(bool(effective["is_open"])),
+             effective["open_time"], effective["close_time"], start, end)
+        )
+    db.commit()
+    return jsonify({"message": "Horários de almoço atualizados."}), 200
+
+
+@barber_bp.route("/commissions", methods=["GET"])
+@barber_required
+def barber_commissions():
+    """Mostra somente a comissão do profissional autenticado por período."""
+    from calendar import monthrange
+
+    period = request.args.get("period", "weekly")
+    today = date.today()
+    if period == "daily":
+        start = end = today
+    elif period == "weekly":
+        start = today - timedelta(days=today.weekday())
+        end = start + timedelta(days=6)
+    elif period == "monthly":
+        start = today.replace(day=1)
+        end = today.replace(day=monthrange(today.year, today.month)[1])
+    elif period == "yearly":
+        start = date(today.year, 1, 1)
+        end = date(today.year, 12, 31)
+    else:
+        return jsonify({"error": "Período inválido."}), 400
+
+    row = get_db().execute(
+        """SELECT COUNT(*) AS completed_count,
+                  COALESCE(SUM(price_cents), 0) AS sales_cents,
+                  COALESCE(SUM(commission_cents), 0) AS commission_cents
+           FROM appointments
+           WHERE barbershop_id = ? AND barber_id = ? AND status = 'completed'
+             AND date(starts_at) BETWEEN ? AND ?""",
+        (session["barbershop_id"], session["user_id"], start.isoformat(), end.isoformat())
+    ).fetchone()
+    user = get_db().execute(
+        "SELECT commission_percent FROM users WHERE id = ? AND barbershop_id = ?",
+        (session["user_id"], session["barbershop_id"])
+    ).fetchone()
+    return jsonify({
+        "period": period,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "commission_percent": user["commission_percent"] if user else 0,
+        "completed_count": row["completed_count"],
+        "sales_cents": row["sales_cents"],
+        "commission_cents": row["commission_cents"]
+    }), 200
+
+
 @barber_bp.route("/appointments/<int:appointment_id>/complete", methods=["POST"])
 @barber_required
 def complete_barber_appointment(appointment_id):
@@ -302,17 +711,35 @@ def complete_barber_appointment(appointment_id):
     db = get_db()
     appointment = db.execute(
         """
-        SELECT id, service_name, price_cents, starts_at
+        SELECT appointments.id, appointments.service_name,
+               appointments.price_cents, appointments.starts_at,
+               appointments.commission_percent,
+               users.commission_percent AS current_commission_percent
         FROM appointments
-        WHERE id = ? AND barbershop_id = ? AND barber_id = ? AND status = 'scheduled'
+        INNER JOIN users
+          ON users.id = appointments.barber_id
+         AND users.barbershop_id = appointments.barbershop_id
+        WHERE appointments.id = ? AND appointments.barbershop_id = ?
+          AND appointments.barber_id = ? AND appointments.status = 'scheduled'
         """,
         (appointment_id, session["barbershop_id"], session["user_id"])
     ).fetchone()
     if appointment is None:
         return jsonify({"error": "Atendimento ativo não encontrado na sua agenda."}), 404
+    commission_percent = (
+        appointment["commission_percent"]
+        if appointment["commission_percent"] is not None
+        else (appointment["current_commission_percent"] or 0)
+    )
+    commission_cents = int((
+        Decimal(appointment["price_cents"]) * Decimal(str(commission_percent)) / Decimal("100")
+    ).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     db.execute(
-        "UPDATE appointments SET status = 'completed' WHERE id = ? AND barbershop_id = ? AND barber_id = ?",
-        (appointment_id, session["barbershop_id"], session["user_id"])
+        """UPDATE appointments
+           SET status = 'completed', commission_percent = ?, commission_cents = ?
+           WHERE id = ? AND barbershop_id = ? AND barber_id = ?""",
+        (commission_percent, commission_cents, appointment_id,
+         session["barbershop_id"], session["user_id"])
     )
     db.execute(
         """
