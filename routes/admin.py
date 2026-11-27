@@ -611,7 +611,7 @@ def create_time_block():
             """
             SELECT id FROM users
             WHERE id = ? AND barbershop_id = ?
-              AND role = 'barber' AND is_active = 1
+              AND role IN ('barber', 'owner') AND is_active = 1
             """,
             (barber_id, session["barbershop_id"])
         ).fetchone()
@@ -878,7 +878,7 @@ def get_barbershop_settings():
     """Retorna os dados básicos e a logo da barbearia autenticada."""
 
     row = get_db().execute(
-        "SELECT name, logo_data FROM barbershops WHERE id = ?",
+        "SELECT name, logo_data, brand_color, theme, whatsapp FROM barbershops WHERE id = ?",
         (session["barbershop_id"],)
     ).fetchone()
     if row is None:
