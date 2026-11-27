@@ -80,7 +80,8 @@ def login_barber(slug, barber_id):
           AND users.id = ?
           AND users.role IN ('barber', 'owner')
           AND users.is_active = 1
-          AND (users.role = 'barber' OR users.can_serve = 1)\n          AND users.pin_hash IS NOT NULL
+          AND (users.role = 'barber' OR users.can_serve = 1)
+          AND users.pin_hash IS NOT NULL
         """,
         (slug, barber_id)
     ).fetchone()
