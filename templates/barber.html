@@ -109,7 +109,7 @@ body.drawer-open .drawer-backdrop{opacity:1;pointer-events:auto}
  <div class="login-card">
   <div class="brand">BARBER-SYSTEM / ÁREA DO COLABORADOR</div>
   <h1>{{ barbershop_name }}</h1>
-  <p class="muted">Acesse sua agenda, seus clientes e seus resultados.</p>
+  <p class="muted">Acesse sua agenda e acompanhe somente suas próprias comissões.</p>
   <label for="staff-select">Profissional</label>
   <select id="staff-select"><option value="">Carregando equipe...</option></select>
   <label for="pin">PIN de acesso</label>
@@ -183,9 +183,9 @@ body.drawer-open .drawer-backdrop{opacity:1;pointer-events:auto}
 
 <div class="modal-backdrop hidden" id="booking-modal">
  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="booking-title">
-  <div class="panel-header"><div><h2 id="booking-title">Novo agendamento</h2><p class="muted">Cadastre o cliente e reserve um horário na sua agenda.</p></div><button class="ghost" id="close-booking" aria-label="Fechar">×</button></div>
-  <label for="booking-customer-name">Nome do cliente</label><input id="booking-customer-name" maxlength="120" placeholder="Nome completo">
-  <label for="booking-customer-phone">Celular com DDD</label><input id="booking-customer-phone" inputmode="tel" placeholder="(11) 99999-9999">
+  <div class="panel-header"><div><h2 id="booking-title">Novo agendamento</h2><p class="muted">Escolha um cliente já cadastrado pelo administrador e reserve um horário na sua agenda.</p></div><button class="ghost" id="close-booking" aria-label="Fechar">×</button></div>
+  <label for="booking-customer">Cliente cadastrado</label><select id="booking-customer"><option value="">Carregando clientes...</option></select>
+  <p class="muted">Os clientes são cadastrados e gerenciados pelo administrador. O telefone não aparece nesta área.</p>
   <label for="booking-service">Serviço</label><select id="booking-service"><option value="">Selecione um serviço</option></select>
   <div class="form-grid">
    <div><label for="booking-date">Data</label><input id="booking-date" type="date"></div>
@@ -204,6 +204,8 @@ const weekdays=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'
 let loggedName='';
 let currentRate=0;
 let services=[];
+let customers=[];
+let preferredBookingTime='';
 let scheduleDays=[];
 let appointments=[];
 
@@ -249,7 +251,7 @@ $('login').addEventListener('click',async()=>{
   $('welcome').textContent='Olá, '+loggedName;$('drawer-name').textContent=loggedName;
   $('login-card').classList.add('hidden');$('workspace').classList.remove('hidden');
   $('date').value=today();$('booking-date').value=today();$('pin').value='';
-  await Promise.all([loadServices(),loadLunchSchedule()]);
+  await Promise.all([loadServices(),loadCustomers(),loadLunchSchedule()]);
   await loadAgenda();
  }catch(e){message('login-message',e.message,true);}
  finally{$('login').disabled=false;}
@@ -262,6 +264,13 @@ async function loadServices(){
   service.name+' · '+money(service.price_cents)+' · '+service.duration_minutes+' min',
   service.id
  )));
+}
+async function loadCustomers(){
+ const data=await api('/barber/customers');customers=data.customers;
+ const select=$('booking-customer');select.replaceChildren(new Option(
+  customers.length?'Selecione um cliente':'Nenhum cliente cadastrado pelo administrador',''
+ ));
+ customers.forEach(customer=>select.add(new Option(customer.name,String(customer.id))));
 }
 async function loadAgenda(){
  const selected=$('date').value||today();$('date').value=selected;
@@ -304,6 +313,14 @@ function renderCalendar(items,selected,daySchedule){
   const label=document.createElement('div');label.className='time-label';label.style.top=((t-start)*ppx)+'px';label.textContent=clock(t);axis.append(label);
  }
  const lane=document.createElement('div');lane.className='time-lane';lane.style.height=totalHeight+'px';lane.style.setProperty('--hour-height',hourHeight+'px');
+ lane.title='Clique em um espaço livre para iniciar um agendamento';
+ lane.addEventListener('click',event=>{
+  if(event.target.closest('.calendar-item,.break-block'))return;
+  const rect=lane.getBoundingClientRect();
+  const raw=start+((event.clientY-rect.top)/ppx);
+  const chosen=Math.max(start,Math.min(end,Math.round(raw/15)*15));
+  openBooking(selected,clock(chosen));
+ });
  if(daySchedule&&daySchedule.break_start&&daySchedule.break_end){
   const bStart=minutes(daySchedule.break_start),bEnd=minutes(daySchedule.break_end);
   if(bStart!==null&&bEnd!==null&&bEnd>bStart){
@@ -347,10 +364,12 @@ $('prev-day').addEventListener('click',()=>{$('date').value=shift($('date').valu
 $('next-day').addEventListener('click',()=>{$('date').value=shift($('date').value,1);loadAgenda().catch(e=>message('agenda-message',e.message,true));});
 $('today').addEventListener('click',()=>{$('date').value=today();loadAgenda().catch(e=>message('agenda-message',e.message,true));});
 
-function openBooking(){
- $('booking-modal').classList.remove('hidden');$('booking-date').value=$('date').value||today();
+function openBooking(dateValue=$('date').value||today(),timeValue=''){
+ $('booking-modal').classList.remove('hidden');$('booking-date').value=dateValue;
+ $('booking-service').value='';$('booking-customer').value='';
+ preferredBookingTime=timeValue||'';
  $('booking-time').replaceChildren(new Option('Selecione serviço e data',''));
- message('booking-message','');
+ message('booking-message',timeValue?'Horário escolhido: '+timeValue+'. Selecione o serviço para confirmar a disponibilidade.':'');
 }
 function closeBooking(){$('booking-modal').classList.add('hidden');}
 async function loadAvailableSlots(){
@@ -361,6 +380,14 @@ async function loadAvailableSlots(){
   const data=await api('/barber/availability?service_id='+encodeURIComponent(serviceId)+'&date='+encodeURIComponent(dateValue));
   select.replaceChildren(new Option(data.slots.length?'Selecione o horário':'Nenhum horário livre neste dia',''));
   data.slots.forEach(slot=>select.add(new Option(slot,slot)));
+  if(preferredBookingTime){
+   if(data.slots.includes(preferredBookingTime)){
+    select.value=preferredBookingTime;
+   }else{
+    message('booking-message','O horário clicado não está livre para este serviço. Escolha outro horário disponível.',true);
+   }
+   preferredBookingTime='';
+  }
  }catch(e){select.replaceChildren(new Option('Não foi possível carregar',''));message('booking-message',e.message,true);}
 }
 $('new-booking').addEventListener('click',openBooking);
@@ -370,17 +397,17 @@ $('booking-service').addEventListener('change',loadAvailableSlots);
 $('booking-date').addEventListener('change',loadAvailableSlots);
 $('save-booking').addEventListener('click',async()=>{
  const payload={
-  customer_name:$('booking-customer-name').value,
-  customer_phone:$('booking-customer-phone').value,
+  customer_id:Number($('booking-customer').value),
   service_id:Number($('booking-service').value),
   starts_at:$('booking-date').value+'T'+$('booking-time').value
  };
+ if(!payload.customer_id){message('booking-message','Selecione um cliente cadastrado pelo administrador.',true);return;}
  if(!payload.service_id||!$('booking-time').value){message('booking-message','Selecione o serviço e um horário disponível.',true);return;}
  $('save-booking').disabled=true;
  try{
   await api('/barber/appointments',{method:'POST',body:JSON.stringify(payload)});
   message('booking-message','Agendamento criado com sucesso.');
-  closeBooking();$('booking-customer-name').value='';$('booking-customer-phone').value='';$('booking-service').value='';
+  closeBooking();$('booking-customer').value='';$('booking-service').value='';
   $('date').value=payload.starts_at.slice(0,10);await loadAgenda();
  }catch(e){message('booking-message',e.message,true);}
  finally{$('save-booking').disabled=false;}
