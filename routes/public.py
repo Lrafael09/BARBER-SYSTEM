@@ -41,7 +41,7 @@ def mask_customer_name(name):
 def find_barbershop(slug):
     return get_db().execute(
         """
-        SELECT id, name, slug, whatsapp
+        SELECT id, name, slug, whatsapp, logo_data
         FROM barbershops
         WHERE slug = ?
         """,
@@ -102,7 +102,7 @@ def lookup_customer(slug):
         "matches": [
             {
                 "id": row["id"],
-                "display_name": mask_customer_name(row["name"])
+                "display_name": row["name"]
             }
             for row in rows
         ],
@@ -532,7 +532,8 @@ def public_booking_page(slug):
     return render_template(
         "booking.html",
         barbershop_name=barbershop["name"],
-        barbershop_slug=barbershop["slug"]
+        barbershop_slug=barbershop["slug"],
+        barbershop_logo=barbershop["logo_data"]
     )
 
 
@@ -568,7 +569,8 @@ def public_booking_catalog(slug):
     return jsonify({
         "services": [dict(row) for row in services],
         "barbers": [dict(row) for row in barbers],
-        "whatsapp": barbershop["whatsapp"]
+        "whatsapp": barbershop["whatsapp"],
+        "logo_data": barbershop["logo_data"]
     }), 200
 
 
