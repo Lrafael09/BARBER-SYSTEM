@@ -363,9 +363,10 @@ $('appointment-complete').addEventListener('click',async()=>{if(!selectedAppoint
 $('appointment-cancel').addEventListener('click',async()=>{if(!selectedAppointment)return;const reason=prompt('Informe o motivo do cancelamento:');if(!reason)return;try{await api('/admin/appointments/'+selectedAppointment.id+'/cancel',{method:'POST',body:JSON.stringify({reason})});closeAppointmentModal();await loadAgenda();await loadOverview();}catch(e){showMessage('appointment-modal-message',e.message,true);}});
 $('save-appointment-barber').addEventListener('click',async()=>{if(!selectedAppointment)return;try{await api('/admin/appointments/'+selectedAppointment.id+'/barber',{method:'PATCH',body:JSON.stringify({barber_id:$('appointment-barber-select').value?Number($('appointment-barber-select').value):null})});closeAppointmentModal();await loadAgenda();}catch(e){showMessage('appointment-modal-message',e.message,true);}});
 
-function syncWalkInButton(selectedDate){
+function syncWalkInButton(selectedDate,businessDays){
  const isToday=selectedDate===toLocalInputDate(new Date());
- $('add-walkin').classList.toggle('hidden',dateWeekday(selectedDate)!==5||!isToday);
+ const saturday=businessDays.find(day=>day.weekday===5);
+ $('add-walkin').classList.toggle('hidden',dateWeekday(selectedDate)!==5||!isToday||!saturday?.is_open);
 }
 async function openWalkInModal(){
  $('walkin-modal').classList.remove('hidden');showMessage('walkin-message','Carregando dados...');
@@ -426,12 +427,14 @@ function renderDailyCalendar(appointments,selectedDate,businessDays,staff){
  const root=$('day-calendar');root.replaceChildren();
  const selected= $('agenda-professional').value;
  const visibleAppointments=selected?appointments.filter(a=>String(a.barber_id||'')===selected):appointments;
- syncWalkInButton(selectedDate);
+ syncWalkInButton(selectedDate,businessDays);
  if(dateWeekday(selectedDate)===5){
   renderSaturdayQueue(root,visibleAppointments);
   const label=new Date(selectedDate+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  const saturday=businessDays.find(day=>day.weekday===5);
   showMessage('agenda-message',label+' \xB7 '+visibleAppointments.length+' registro(s). S\xE1bado funciona exclusivamente por ordem de chegada; n\xE3o h\xE1 hor\xE1rios reservados.');
-  if(selectedDate!==toLocalInputDate(new Date()))showMessage('agenda-message',label+' \xB7 A fila s\xF3 pode receber novos clientes no pr\xF3prio s\xE1bado.');
+  if(!saturday?.is_open)showMessage('agenda-message',label+' \xB7 A barbearia est\xE1 marcada como fechada neste dia.');
+  else if(selectedDate!==toLocalInputDate(new Date()))showMessage('agenda-message',label+' \xB7 A fila s\xF3 pode receber novos clientes no pr\xF3prio s\xE1bado.');
   return;
  }
  let lanes=staff.filter(x=>x.is_active&&(x.role==='owner'||x.role==='barber'));
