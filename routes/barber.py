@@ -236,6 +236,23 @@ def barber_appointments():
         conditions.append("date(appointments.starts_at) = ?")
         params.append(date_filter)
 
+    date_from = request.args.get("from")
+    date_to = request.args.get("to")
+    if date_from:
+        try:
+            date.fromisoformat(date_from)
+        except ValueError:
+            return jsonify({"error": "A data inicial deve usar AAAA-MM-DD."}), 400
+        conditions.append("date(appointments.starts_at) >= ?")
+        params.append(date_from)
+    if date_to:
+        try:
+            date.fromisoformat(date_to)
+        except ValueError:
+            return jsonify({"error": "A data final deve usar AAAA-MM-DD."}), 400
+        conditions.append("date(appointments.starts_at) <= ?")
+        params.append(date_to)
+
     if status_filter:
         conditions.append("appointments.status = ?")
         params.append(status_filter)
