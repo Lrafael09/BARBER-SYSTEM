@@ -158,8 +158,8 @@
   $('create-customer').addEventListener('click', async () => {
     const name = $('customer-name').value.trim();
     const phone = $('phone').value.replace(/\D/g,'');
-    if (name.length < 3 || name.length > 120 || phone.length < 10 || phone.length > 13) {
-      message('customer-message','Informe seu nome completo e um celular válido com DDD.');
+    if (name.split(/\s+/).filter(Boolean).length < 2 || name.length > 120 || phone.length < 10 || phone.length > 13) {
+      message('customer-message','Informe nome e sobrenome, além de um celular válido com DDD.');
       return;
     }
     try {
