@@ -119,7 +119,7 @@ async function api(request, env, url) {
         }
       }
       if (String(error?.message || "").toLowerCase().includes("unique")) return json({ error: "Este e-mail, WhatsApp ou endereço já está em uso. Confira os dados e tente novamente." }, 409);
-      return json({ error: "Não foi possível concluir o cadastro agora. Tente novamente em alguns instantes. Seus dados não foram confirmados." }, 503);
+      return json({ error: "Não foi possível criar sua conta agora. Tente novamente em alguns instantes." }, 503);
     }
     return json({ message: "Barbearia cadastrada com sucesso. Agora entre com seu e-mail e senha.", barbershop: { id: barbershopId, name: shop, slug } }, 201);
   }
