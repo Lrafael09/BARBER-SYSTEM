@@ -51,7 +51,7 @@ Authenticated professional endpoints:
 
 Closing a service updates the appointment, calculates the professional's commission in cents and creates the corresponding finance entry in one D1 batch. Reopening or cancelling a completed appointment removes its linked finance entry.
 
-This phase is backend-only. The existing Flask HTML pages still call Flask endpoints and must be connected to the Cloudflare API in the later interface phase.
+The professional interface is available at `/barber/:slug` and calls the Cloudflare API. The public booking interface is available at `/b/:slug/book` and calls the public booking API.
 
 ## Administrator finance migration
 Owner-only endpoints:
