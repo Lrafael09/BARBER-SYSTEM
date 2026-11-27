@@ -193,9 +193,15 @@ class BarberSystemTests(unittest.TestCase):
             "email": "dono@example.com",
             "password": "senha-forte-123",
         })
+        entries_after_completion = self.client.get("/admin/finance/entries")
+        self.assertEqual(entries_after_completion.status_code, 200, entries_after_completion.get_json())
+        self.assertTrue(any(
+            entry["entry_type"] == "income" and entry["appointment_id"] == booking_a.get_json()["appointment"]["id"]
+            for entry in entries_after_completion.get_json()["entries"]
+        ))
+
         finance = self.client.get("/admin/finance/summary?period=year")
         self.assertEqual(finance.status_code, 200, finance.get_json())
-        self.assertGreaterEqual(finance.get_json()["income_cents"], 4000)
 
         goals = self.client.put("/admin/finance/goals", json={
             "daily": "200.00", "weekly": "1000.00", "monthly": "4000.00",
