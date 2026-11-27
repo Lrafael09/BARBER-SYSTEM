@@ -678,6 +678,19 @@ def admin_dashboard():
     db = get_db()
     barbershop_id = session["barbershop_id"]
 
+    db.execute(
+        """
+        INSERT OR IGNORE INTO finance_entries
+            (barbershop_id, entry_type, description, category, amount_cents, entry_date, appointment_id)
+        SELECT barbershop_id, 'income', 'Atendimento concluído: ' || service_name,
+               'Atendimentos', price_cents, date(starts_at), id
+        FROM appointments
+        WHERE barbershop_id = ? AND status = 'completed'
+        """,
+        (barbershop_id,)
+    )
+    db.commit()
+
     totals = db.execute(
         """
         SELECT
@@ -709,6 +722,17 @@ def admin_dashboard():
         (barbershop_id,)
     ).fetchone()
 
+    revenue_totals = db.execute(
+        """
+        SELECT
+            COALESCE(SUM(CASE WHEN entry_date = date('now', 'localtime') AND entry_type = 'income' THEN amount_cents ELSE 0 END), 0) AS today_income,
+            COALESCE(SUM(CASE WHEN strftime('%Y-%m', entry_date) = strftime('%Y-%m', 'now', 'localtime') AND entry_type = 'income' THEN amount_cents ELSE 0 END), 0) AS month_income
+        FROM finance_entries
+        WHERE barbershop_id = ?
+        """,
+        (barbershop_id,)
+    ).fetchone()
+
     counts = db.execute(
         """
         SELECT
@@ -725,11 +749,11 @@ def admin_dashboard():
             "scheduled": totals["scheduled_today"] or 0,
             "completed": totals["completed_today"] or 0,
             "cancelled": totals["cancelled_today"] or 0,
-            "revenue_cents": totals["revenue_today_cents"] or 0
+            "revenue_cents": revenue_totals["today_income"] or 0
         },
         "month": {
             "appointments": monthly["appointments_month"] or 0,
-            "revenue_cents": monthly["revenue_month_cents"] or 0
+            "revenue_cents": revenue_totals["month_income"] or 0
         },
         "base": {
             "customers": counts["customers"],
@@ -1327,6 +1351,21 @@ def finance_summary():
         (session["barbershop_id"],)
     ).fetchall()
     goal_map = {row["period_type"]: row["target_cents"] for row in goals}
+    goal_achieved = {}
+    for goal_period in ("daily", "weekly", "monthly"):
+        goal_start, goal_end = _finance_period({
+            "daily": "today", "weekly": "week", "monthly": "month"
+        }[goal_period])
+        achieved = db.execute(
+            """
+            SELECT COALESCE(SUM(amount_cents), 0) AS amount
+            FROM finance_entries
+            WHERE barbershop_id = ? AND entry_type = 'income'
+              AND entry_date >= ? AND entry_date <= ?
+            """,
+            (session["barbershop_id"], goal_start, goal_end)
+        ).fetchone()
+        goal_achieved[goal_period] = achieved["amount"]
     return jsonify({
         "period": period, "start": start, "end": end,
         "income_cents": totals["income"], "expense_cents": totals["expenses"],
@@ -1336,7 +1375,8 @@ def finance_summary():
             "daily": goal_map.get("daily", 0),
             "weekly": goal_map.get("weekly", 0),
             "monthly": goal_map.get("monthly", 0)
-        }
+        },
+        "goal_achieved": goal_achieved
     }), 200
 
 
