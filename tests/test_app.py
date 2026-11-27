@@ -247,7 +247,32 @@ class BarberSystemTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200, login.get_json())
         self.assertEqual(login.get_json()["barber"]["commission_percent"], 40.0)
 
+        # A sessão de colaborador não pode abrir o painel ou APIs administrativas.
+        panel = self.client.get("/admin/panel", follow_redirects=False)
+        self.assertEqual(panel.status_code, 303)
+        self.assertEqual(panel.headers["Location"], "/barber/barbearia-teste")
+        for private_url in (
+            "/admin/dashboard", "/admin/barbers", "/admin/services",
+            "/admin/products", "/admin/customers", "/admin/finance/summary",
+            "/admin/finance/entries",
+        ):
+            self.assertEqual(self.client.get(private_url).status_code, 401, private_url)
+
+        staff_customers = self.client.get("/barber/customers")
+        self.assertEqual(staff_customers.status_code, 200, staff_customers.get_json())
+        self.assertEqual(staff_customers.get_json()["customers"], [{
+            "id": customer_id, "name": "Cliente Administrado"
+        }])
+        self.assertNotIn("phone", str(staff_customers.get_json()))
+
         today = date.today()
+        customer = self.client.post(f"/b/{slug}/customers", json={
+            "name": "Cliente Administrado",
+            "phone": "11987654321",
+        })
+        self.assertEqual(customer.status_code, 201, customer.get_json())
+        customer_id = customer.get_json()["customer"]["id"]
+
         lunch_days = [{
             "weekday": weekday,
             "break_start": "13:00" if weekday == today.weekday() else None,
@@ -281,8 +306,7 @@ class BarberSystemTests(unittest.TestCase):
         self.assertNotIn("13:00", public_availability.get_json()["slots"])
 
         booking = self.client.post("/barber/appointments", json={
-            "customer_name": "Cliente Balcão",
-            "customer_phone": "11987654321",
+            "customer_id": customer_id,
             "service_id": service_id,
             "starts_at": f"{today.isoformat()}T14:00",
         })
@@ -352,6 +376,9 @@ class BarberSystemTests(unittest.TestCase):
             "can_serve": True, "pin": "9876",
         })
         self.assertEqual(provider.status_code, 200, provider.get_json())
+        team = self.client.get("/admin/barbers").get_json()["barbers"]
+        owner = next(x for x in team if x["role"] == "owner")
+        self.assertTrue(owner["can_serve"])
         catalog = self.client.get(f"/b/{slug}/catalog").get_json()
         self.assertTrue(any(x["role"] == "owner" for x in catalog["barbers"]))
 
