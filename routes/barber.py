@@ -37,8 +37,9 @@ def barber_required(view):
             FROM users
             WHERE id = ?
               AND barbershop_id = ?
-              AND role = 'barber'
+              AND role IN ('barber', 'owner')
               AND is_active = 1
+              AND (role = 'barber' OR can_serve = 1)
             """,
             (session["user_id"], session.get("barbershop_id"))
         ).fetchone()
@@ -77,8 +78,9 @@ def login_barber(slug, barber_id):
             ON barbershops.id = users.barbershop_id
         WHERE barbershops.slug = ?
           AND users.id = ?
-          AND users.role = 'barber'
+          AND users.role IN ('barber', 'owner')
           AND users.is_active = 1
+          AND (users.role = 'barber' OR users.can_serve = 1)
         """,
         (slug, barber_id)
     ).fetchone()
@@ -280,23 +282,31 @@ def complete_barber_appointment(appointment_id):
     """Marca como concluído somente um atendimento do barbeiro logado."""
 
     db = get_db()
-    cursor = db.execute(
+    appointment = db.execute(
         """
-        UPDATE appointments
-        SET status = 'completed'
-        WHERE id = ?
-          AND barbershop_id = ?
-          AND barber_id = ?
-          AND status = 'scheduled'
+        SELECT id, service_name, price_cents, starts_at
+        FROM appointments
+        WHERE id = ? AND barbershop_id = ? AND barber_id = ? AND status = 'scheduled'
         """,
         (appointment_id, session["barbershop_id"], session["user_id"])
+    ).fetchone()
+    if appointment is None:
+        return jsonify({"error": "Atendimento ativo não encontrado na sua agenda."}), 404
+    db.execute(
+        "UPDATE appointments SET status = 'completed' WHERE id = ? AND barbershop_id = ? AND barber_id = ?",
+        (appointment_id, session["barbershop_id"], session["user_id"])
+    )
+    db.execute(
+        """
+        INSERT OR IGNORE INTO finance_entries
+            (barbershop_id, entry_type, description, category, amount_cents, entry_date, appointment_id)
+        VALUES (?, 'income', ?, 'Atendimentos', ?, date(?), ?)
+        """,
+        (session["barbershop_id"], "Atendimento concluído: " + appointment["service_name"],
+         appointment["price_cents"], appointment["starts_at"], appointment_id)
     )
     db.commit()
-
-    if cursor.rowcount == 0:
-        return jsonify({"error": "Atendimento ativo não encontrado na sua agenda."}), 404
-
-    return jsonify({"message": "Atendimento marcado como concluído."}), 200
+    return jsonify({"message": "Atendimento concluído e registrado no financeiro."}), 200
 
 
 @barber_bp.route("/appointments/<int:appointment_id>/cancel", methods=["POST"])
@@ -351,3 +361,39 @@ def barber_panel_page(slug):
         barbershop_name=shop["name"],
         barbershop_slug=shop["slug"]
     )
+
+
+@barber_bp.route("/<slug>/staff", methods=["GET"])
+def list_public_staff(slug):
+    """Lista somente os profissionais que podem receber agendamentos."""
+    shop = get_db().execute(
+        "SELECT id FROM barbershops WHERE slug = ?", (slug,)
+    ).fetchone()
+    if shop is None:
+        return jsonify({"error": "Barbearia não encontrada."}), 404
+    rows = get_db().execute(
+        """
+        SELECT id, name, role
+        FROM users
+        WHERE barbershop_id = ? AND is_active = 1
+          AND (role = 'barber' OR (role = 'owner' AND can_serve = 1))
+          AND (role = 'owner' OR pin_hash IS NOT NULL)
+        ORDER BY name COLLATE NOCASE
+        """,
+        (shop["id"],)
+    ).fetchall()
+    return jsonify({"staff": [dict(row) for row in rows]}), 200
+
+
+@barber_bp.route("/<slug>/login", methods=["POST"])
+def login_barber_from_shop_link(slug):
+    """Login simplificado: o colaborador escolhe o próprio nome e informa o PIN."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Selecione seu nome e informe o PIN."}), 400
+    try:
+        barber_id = int(data.get("barber_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Selecione um profissional válido."}), 400
+    # Reutiliza a autenticação, limitação de tentativas e bloqueio do endpoint legado.
+    return login_barber(slug, barber_id)
