@@ -155,9 +155,9 @@ def create_barber():
     cursor = db.execute(
         """
         INSERT INTO users (
-            barbershop_id, name, pin_hash, role, is_active
+            barbershop_id, name, pin_hash, role, is_active, can_serve
         )
-        VALUES (?, ?, ?, 'barber', 1)
+        VALUES (?, ?, ?, 'barber', 1, 1)
         """,
         (
             session["barbershop_id"],
@@ -714,7 +714,7 @@ def admin_dashboard():
         SELECT
             (SELECT COUNT(*) FROM customers WHERE barbershop_id = ?) AS customers,
             (SELECT COUNT(*) FROM services WHERE barbershop_id = ? AND is_active = 1) AS active_services,
-            (SELECT COUNT(*) FROM users WHERE barbershop_id = ? AND role = 'barber' AND is_active = 1) AS active_barbers
+            (SELECT COUNT(*) FROM users WHERE barbershop_id = ? AND role IN ('barber', 'owner') AND is_active = 1 AND can_serve = 1) AS active_barbers
         """,
         (barbershop_id, barbershop_id, barbershop_id)
     ).fetchone()
@@ -765,6 +765,23 @@ def list_appointments():
     if date_filter:
         conditions.append("date(appointments.starts_at) = ?")
         params.append(date_filter)
+
+    date_from = request.args.get("from")
+    date_to = request.args.get("to")
+    if date_from:
+        try:
+            date.fromisoformat(date_from)
+        except ValueError:
+            return jsonify({"error": "A data inicial deve usar AAAA-MM-DD."}), 400
+        conditions.append("date(appointments.starts_at) >= ?")
+        params.append(date_from)
+    if date_to:
+        try:
+            date.fromisoformat(date_to)
+        except ValueError:
+            return jsonify({"error": "A data final deve usar AAAA-MM-DD."}), 400
+        conditions.append("date(appointments.starts_at) <= ?")
+        params.append(date_to)
 
     if status_filter:
         conditions.append("appointments.status = ?")
@@ -867,7 +884,11 @@ def get_barbershop_settings():
     if row is None:
         return jsonify({"error": "Barbearia não encontrada."}), 404
 
-    return jsonify({"name": row["name"], "logo_data": row["logo_data"]}), 200
+    return jsonify({
+        "name": row["name"], "logo_data": row["logo_data"],
+        "brand_color": row["brand_color"], "theme": row["theme"],
+        "whatsapp": row["whatsapp"]
+    }), 200
 
 
 @admin_bp.route("/barbershop/logo", methods=["POST"])
@@ -934,3 +955,494 @@ def list_customers():
             for row in rows
         ]
     }), 200
+
+
+# ---------------------------------------------------------------------------
+# Gestão de equipe, horários individuais, produtos, caixa e metas financeiras
+# ---------------------------------------------------------------------------
+
+def _staff_record(user_id, barbershop_id):
+    return get_db().execute(
+        """
+        SELECT id, name, role, is_active, can_serve
+        FROM users
+        WHERE id = ? AND barbershop_id = ?
+          AND role IN ('owner', 'barber')
+        """,
+        (user_id, barbershop_id)
+    ).fetchone()
+
+
+@admin_bp.route("/barbers", methods=["GET"])
+@active_owner_required
+def list_barbers():
+    rows = get_db().execute(
+        """
+        SELECT id, name, role, is_active, can_serve
+        FROM users
+        WHERE barbershop_id = ? AND role = 'barber'
+        ORDER BY is_active DESC, name COLLATE NOCASE
+        """,
+        (session["barbershop_id"],)
+    ).fetchall()
+    owner = get_db().execute(
+        """
+        SELECT id, name, role, is_active, can_serve
+        FROM users
+        WHERE barbershop_id = ? AND role = 'owner'
+        LIMIT 1
+        """,
+        (session["barbershop_id"],)
+    ).fetchone()
+    records = [dict(row) for row in rows]
+    if owner:
+        records.insert(0, dict(owner))
+    return jsonify({"barbers": records}), 200
+
+
+@admin_bp.route("/barbers/<int:barber_id>", methods=["PATCH"])
+@active_owner_required
+def update_barber(barber_id):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
+        return jsonify({"error": "Envie os dados que deseja atualizar."}), 400
+    db = get_db()
+    barber = db.execute(
+        "SELECT id, name, is_active FROM users WHERE id = ? AND barbershop_id = ? AND role = 'barber'",
+        (barber_id, session["barbershop_id"])
+    ).fetchone()
+    if barber is None:
+        return jsonify({"error": "Colaborador não encontrado."}), 404
+    name = str(data.get("name", barber["name"])).strip()
+    if not name or len(name) > 120:
+        return jsonify({"error": "Informe um nome de até 120 caracteres."}), 400
+    is_active = data.get("is_active", bool(barber["is_active"]))
+    if not isinstance(is_active, bool):
+        return jsonify({"error": "Estado de ativação inválido."}), 400
+    pin_hash = None
+    if "pin" in data and data["pin"] != "":
+        pin = data["pin"]
+        if not isinstance(pin, str) or len(pin) != 4 or not pin.isdigit():
+            return jsonify({"error": "O PIN deve conter exatamente quatro números."}), 400
+        pin_hash = generate_password_hash(pin)
+    if pin_hash:
+        db.execute(
+            "UPDATE users SET name = ?, is_active = ?, pin_hash = ? WHERE id = ? AND barbershop_id = ?",
+            (name, int(is_active), pin_hash, barber_id, session["barbershop_id"])
+        )
+    else:
+        db.execute(
+            "UPDATE users SET name = ?, is_active = ? WHERE id = ? AND barbershop_id = ?",
+            (name, int(is_active), barber_id, session["barbershop_id"])
+        )
+    db.commit()
+    return jsonify({"message": "Colaborador atualizado.", "barber": {
+        "id": barber_id, "name": name, "is_active": is_active
+    }}), 200
+
+
+@admin_bp.route("/barbers/<int:barber_id>", methods=["DELETE"])
+@active_owner_required
+def deactivate_barber(barber_id):
+    cursor = get_db().execute(
+        "UPDATE users SET is_active = 0, can_serve = 0 WHERE id = ? AND barbershop_id = ? AND role = 'barber'",
+        (barber_id, session["barbershop_id"])
+    )
+    get_db().commit()
+    if cursor.rowcount == 0:
+        return jsonify({"error": "Colaborador não encontrado."}), 404
+    return jsonify({"message": "Colaborador desativado. O histórico foi preservado."}), 200
+
+
+@admin_bp.route("/staff/owner", methods=["PATCH"])
+@active_owner_required
+def update_owner_provider():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("can_serve"), bool):
+        return jsonify({"error": "Informe can_serve como verdadeiro ou falso."}), 400
+    get_db().execute(
+        "UPDATE users SET can_serve = ? WHERE id = ? AND barbershop_id = ? AND role = 'owner'",
+        (int(data["can_serve"]), session["user_id"], session["barbershop_id"])
+    )
+    get_db().commit()
+    return jsonify({"message": "Preferência de atendimento do proprietário atualizada."}), 200
+
+
+@admin_bp.route("/staff/<int:user_id>/schedule", methods=["GET"])
+@active_owner_required
+def get_staff_schedule(user_id):
+    staff = _staff_record(user_id, session["barbershop_id"])
+    if staff is None:
+        return jsonify({"error": "Profissional não encontrado."}), 404
+    rows = get_db().execute(
+        """
+        SELECT weekday, is_open, open_time, close_time, break_start, break_end
+        FROM staff_hours WHERE barbershop_id = ? AND user_id = ?
+        ORDER BY weekday
+        """,
+        (session["barbershop_id"], user_id)
+    ).fetchall()
+    configured = {row["weekday"]: dict(row) for row in rows}
+    return jsonify({"user": dict(staff), "days": [
+        configured.get(day, {"weekday": day, "is_open": False,
+            "open_time": None, "close_time": None,
+            "break_start": None, "break_end": None})
+        for day in range(7)
+    ], "uses_business_hours_when_unset": not bool(rows)}), 200
+
+
+@admin_bp.route("/staff/<int:user_id>/schedule", methods=["PUT"])
+@active_owner_required
+def save_staff_schedule(user_id):
+    staff = _staff_record(user_id, session["barbershop_id"])
+    if staff is None:
+        return jsonify({"error": "Profissional não encontrado."}), 404
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("days"), list) or len(data["days"]) != 7:
+        return jsonify({"error": "Envie os sete dias da semana."}), 400
+    seen = set()
+    normalized = []
+    try:
+        for item in data["days"]:
+            weekday = item.get("weekday") if isinstance(item, dict) else None
+            if isinstance(weekday, bool) or not isinstance(weekday, int) or weekday not in range(7) or weekday in seen:
+                raise ValueError("Cada dia da semana deve aparecer uma única vez.")
+            seen.add(weekday)
+            is_open = item.get("is_open")
+            if not isinstance(is_open, bool):
+                raise ValueError("Selecione se o profissional atende em cada dia.")
+            if not is_open:
+                normalized.append((weekday, 0, None, None, None, None))
+                continue
+            opening = validate_clock_time(item.get("open_time"), "abertura")
+            closing = validate_clock_time(item.get("close_time"), "fechamento")
+            if closing <= opening:
+                raise ValueError("O fechamento deve ser depois da abertura.")
+            start_break, end_break = item.get("break_start"), item.get("break_end")
+            if (start_break is None) != (end_break is None):
+                raise ValueError("Informe os dois horários do intervalo.")
+            if start_break is not None:
+                start_break = validate_clock_time(start_break, "início do intervalo")
+                end_break = validate_clock_time(end_break, "fim do intervalo")
+                if not opening < start_break < end_break < closing:
+                    raise ValueError("O intervalo precisa ficar dentro do expediente.")
+            normalized.append((weekday, 1, opening, closing, start_break, end_break))
+    except (ValueError, TypeError, AttributeError) as error:
+        return jsonify({"error": str(error)}), 400
+    db = get_db()
+    for weekday, is_open, opening, closing, start_break, end_break in normalized:
+        db.execute(
+            """
+            INSERT INTO staff_hours (barbershop_id, user_id, weekday, is_open,
+                open_time, close_time, break_start, break_end)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(barbershop_id, user_id, weekday) DO UPDATE SET
+                is_open = excluded.is_open, open_time = excluded.open_time,
+                close_time = excluded.close_time, break_start = excluded.break_start,
+                break_end = excluded.break_end
+            """,
+            (session["barbershop_id"], user_id, weekday, is_open,
+             opening, closing, start_break, end_break)
+        )
+    db.commit()
+    return jsonify({"message": "Horários individuais salvos."}), 200
+
+
+@admin_bp.route("/products", methods=["GET"])
+@active_owner_required
+def list_products():
+    rows = get_db().execute(
+        "SELECT id, name, description, price_cents, is_active FROM products WHERE barbershop_id = ? ORDER BY is_active DESC, name COLLATE NOCASE",
+        (session["barbershop_id"],)
+    ).fetchall()
+    return jsonify({"products": [dict(row) for row in rows]}), 200
+
+
+@admin_bp.route("/products", methods=["POST"])
+@active_owner_required
+def create_product():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie os dados do produto em JSON."}), 400
+    name = str(data.get("name", "")).strip()
+    description = str(data.get("description", "")).strip() or None
+    if not name or len(name) > 120 or (description and len(description) > 500):
+        return jsonify({"error": "Informe um nome válido e descrição de até 500 caracteres."}), 400
+    try:
+        price = parse_price_cents(data.get("price"))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    cursor = get_db().execute(
+        "INSERT INTO products (barbershop_id, name, description, price_cents) VALUES (?, ?, ?, ?)",
+        (session["barbershop_id"], name, description, price)
+    )
+    get_db().commit()
+    return jsonify({"message": "Produto cadastrado.", "product": {
+        "id": cursor.lastrowid, "name": name, "description": description,
+        "price_cents": price, "is_active": True
+    }}), 201
+
+
+@admin_bp.route("/products/<int:product_id>", methods=["PATCH"])
+@active_owner_required
+def update_product(product_id):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
+        return jsonify({"error": "Envie os campos para atualizar."}), 400
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM products WHERE id = ? AND barbershop_id = ?",
+        (product_id, session["barbershop_id"])
+    ).fetchone()
+    if row is None:
+        return jsonify({"error": "Produto não encontrado."}), 404
+    name = str(data.get("name", row["name"])).strip()
+    description = data.get("description", row["description"])
+    description = str(description).strip() or None if description is not None else None
+    if not name or len(name) > 120 or (description and len(description) > 500):
+        return jsonify({"error": "Nome ou descrição inválidos."}), 400
+    try:
+        price = parse_price_cents(data["price"]) if "price" in data else row["price_cents"]
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    active = data.get("is_active", bool(row["is_active"]))
+    if not isinstance(active, bool):
+        return jsonify({"error": "is_active deve ser verdadeiro ou falso."}), 400
+    db.execute(
+        "UPDATE products SET name = ?, description = ?, price_cents = ?, is_active = ? WHERE id = ? AND barbershop_id = ?",
+        (name, description, price, int(active), product_id, session["barbershop_id"])
+    )
+    db.commit()
+    return jsonify({"message": "Produto atualizado."}), 200
+
+
+@admin_bp.route("/products/<int:product_id>", methods=["DELETE"])
+@active_owner_required
+def deactivate_product(product_id):
+    cursor = get_db().execute(
+        "UPDATE products SET is_active = 0 WHERE id = ? AND barbershop_id = ?",
+        (product_id, session["barbershop_id"])
+    )
+    get_db().commit()
+    if cursor.rowcount == 0:
+        return jsonify({"error": "Produto não encontrado."}), 404
+    return jsonify({"message": "Produto desativado."}), 200
+
+
+@admin_bp.route("/barbershop/settings", methods=["POST"])
+@active_owner_required
+def save_barbershop_settings():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie as configurações em JSON."}), 400
+    name = str(data.get("name", "")).strip()
+    whatsapp = "".join(ch for ch in str(data.get("whatsapp", "")) if ch.isdigit())
+    color = str(data.get("brand_color", "#a8f05a")).strip()
+    theme = str(data.get("theme", "dark")).strip().lower()
+    import re
+    if not name or len(name) > 120:
+        return jsonify({"error": "Informe um nome de barbearia válido."}), 400
+    if color and not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        return jsonify({"error": "Escolha uma cor válida."}), 400
+    if theme not in {"dark", "light"}:
+        return jsonify({"error": "Tema inválido."}), 400
+    db = get_db()
+    db.execute(
+        "UPDATE barbershops SET name = ?, whatsapp = ?, brand_color = ?, theme = ? WHERE id = ?",
+        (name, whatsapp or None, color.lower(), theme, session["barbershop_id"])
+    )
+    db.commit()
+    return jsonify({"message": "Identidade da barbearia atualizada."}), 200
+
+
+def _finance_period(period):
+    from datetime import date, timedelta
+    today = date.today()
+    if period == "today":
+        start = end = today
+    elif period == "week":
+        start = today - timedelta(days=today.weekday())
+        end = today
+    elif period == "month":
+        start = today.replace(day=1)
+        end = today
+    elif period == "year":
+        start = today.replace(month=1, day=1)
+        end = today
+    else:
+        raise ValueError("Período inválido. Use today, week, month ou year.")
+    return start.isoformat(), end.isoformat()
+
+
+@admin_bp.route("/finance/summary", methods=["GET"])
+@active_owner_required
+def finance_summary():
+    from datetime import date
+    period = request.args.get("period", "month")
+    try:
+        start, end = _finance_period(period)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    db = get_db()
+    # Reconcilia atendimentos concluídos antes da implantação do livro-caixa.
+    db.execute(
+        """
+        INSERT OR IGNORE INTO finance_entries
+            (barbershop_id, entry_type, description, category, amount_cents, entry_date, appointment_id)
+        SELECT barbershop_id, 'income', 'Atendimento concluído: ' || service_name,
+               'Atendimentos', price_cents, date(starts_at), id
+        FROM appointments
+        WHERE barbershop_id = ? AND status = 'completed'
+        """,
+        (session["barbershop_id"],)
+    )
+    db.commit()
+    totals = db.execute(
+        """
+        SELECT
+            COALESCE(SUM(CASE WHEN entry_type = 'income' THEN amount_cents ELSE 0 END), 0) AS income,
+            COALESCE(SUM(CASE WHEN entry_type = 'expense' THEN amount_cents ELSE 0 END), 0) AS expenses,
+            COUNT(*) AS count
+        FROM finance_entries
+        WHERE barbershop_id = ? AND entry_date >= ? AND entry_date <= ?
+        """,
+        (session["barbershop_id"], start, end)
+    ).fetchone()
+    goals = db.execute(
+        "SELECT period_type, target_cents FROM financial_goals WHERE barbershop_id = ?",
+        (session["barbershop_id"],)
+    ).fetchall()
+    goal_map = {row["period_type"]: row["target_cents"] for row in goals}
+    return jsonify({
+        "period": period, "start": start, "end": end,
+        "income_cents": totals["income"], "expense_cents": totals["expenses"],
+        "profit_cents": totals["income"] - totals["expenses"],
+        "entry_count": totals["count"],
+        "goals": {
+            "daily": goal_map.get("daily", 0),
+            "weekly": goal_map.get("weekly", 0),
+            "monthly": goal_map.get("monthly", 0)
+        }
+    }), 200
+
+
+@admin_bp.route("/finance/entries", methods=["GET"])
+@active_owner_required
+def list_finance_entries():
+    from datetime import date
+    start = request.args.get("from")
+    end = request.args.get("to")
+    conditions = ["barbershop_id = ?"]
+    params = [session["barbershop_id"]]
+    for value, operator, label in ((start, ">=", "inicial"), (end, "<=", "final")):
+        if value:
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                return jsonify({"error": f"Data {label} inválida."}), 400
+            conditions.append(f"entry_date {operator} ?")
+            params.append(value)
+    rows = get_db().execute(
+        f"SELECT id, entry_type, description, category, amount_cents, entry_date, appointment_id FROM finance_entries WHERE {' AND '.join(conditions)} ORDER BY entry_date DESC, id DESC LIMIT 500",
+        params
+    ).fetchall()
+    return jsonify({"entries": [dict(row) for row in rows]}), 200
+
+
+@admin_bp.route("/finance/entries", methods=["POST"])
+@active_owner_required
+def create_finance_entry():
+    from datetime import date
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie o lançamento em JSON."}), 400
+    entry_type = data.get("entry_type")
+    description = str(data.get("description", "")).strip()
+    category = str(data.get("category", "")).strip() or None
+    try:
+        amount = parse_price_cents(data.get("amount"))
+        entry_date = date.fromisoformat(str(data.get("entry_date", date.today().isoformat())))
+    except (ValueError, TypeError) as error:
+        return jsonify({"error": str(error) or "Valor ou data inválidos."}), 400
+    if entry_type not in {"income", "expense"}:
+        return jsonify({"error": "Selecione entrada ou saída."}), 400
+    if not description or len(description) > 160 or amount <= 0:
+        return jsonify({"error": "Informe descrição e valor maior que zero."}), 400
+    cursor = get_db().execute(
+        "INSERT INTO finance_entries (barbershop_id, entry_type, description, category, amount_cents, entry_date) VALUES (?, ?, ?, ?, ?, ?)",
+        (session["barbershop_id"], entry_type, description, category, amount, entry_date.isoformat())
+    )
+    get_db().commit()
+    return jsonify({"message": "Lançamento salvo.", "id": cursor.lastrowid}), 201
+
+
+@admin_bp.route("/finance/entries/<int:entry_id>", methods=["DELETE"])
+@active_owner_required
+def delete_finance_entry(entry_id):
+    cursor = get_db().execute(
+        "DELETE FROM finance_entries WHERE id = ? AND barbershop_id = ? AND appointment_id IS NULL",
+        (entry_id, session["barbershop_id"])
+    )
+    get_db().commit()
+    if cursor.rowcount == 0:
+        return jsonify({"error": "Lançamento manual não encontrado."}), 404
+    return jsonify({"message": "Lançamento removido."}), 200
+
+
+@admin_bp.route("/finance/goals", methods=["PUT"])
+@active_owner_required
+def save_financial_goals():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie as metas em JSON."}), 400
+    normalized = []
+    try:
+        for period in ("daily", "weekly", "monthly"):
+            value = parse_price_cents(data.get(period, 0))
+            normalized.append((period, value))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    db = get_db()
+    for period, target in normalized:
+        db.execute(
+            """
+            INSERT INTO financial_goals (barbershop_id, period_type, target_cents)
+            VALUES (?, ?, ?)
+            ON CONFLICT(barbershop_id, period_type) DO UPDATE SET
+                target_cents = excluded.target_cents, updated_at = CURRENT_TIMESTAMP
+            """,
+            (session["barbershop_id"], period, target)
+        )
+    db.commit()
+    return jsonify({"message": "Metas financeiras atualizadas."}), 200
+
+
+@admin_bp.route("/appointments/<int:appointment_id>/complete", methods=["POST"])
+@active_owner_required
+def complete_appointment_admin(appointment_id):
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT id, service_name, price_cents, starts_at
+        FROM appointments
+        WHERE id = ? AND barbershop_id = ? AND status = 'scheduled'
+        """,
+        (appointment_id, session["barbershop_id"])
+    ).fetchone()
+    if row is None:
+        return jsonify({"error": "Agendamento ativo não encontrado."}), 404
+    db.execute(
+        "UPDATE appointments SET status = 'completed' WHERE id = ? AND barbershop_id = ?",
+        (appointment_id, session["barbershop_id"])
+    )
+    db.execute(
+        """
+        INSERT OR IGNORE INTO finance_entries
+            (barbershop_id, entry_type, description, category, amount_cents, entry_date, appointment_id)
+        VALUES (?, 'income', ?, 'Atendimentos', ?, date(?), ?)
+        """,
+        (session["barbershop_id"], "Atendimento concluído: " + row["service_name"],
+         row["price_cents"], row["starts_at"], appointment_id)
+    )
+    db.commit()
+    return jsonify({"message": "Atendimento concluído e registrado no financeiro."}), 200
