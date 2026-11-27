@@ -11,7 +11,7 @@ Inclui:
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 
-from flask import Blueprint, jsonify, request, session, render_template
+from flask import Blueprint, jsonify, request, session, render_template, redirect, url_for
 from werkzeug.security import generate_password_hash
 
 from database import get_db
@@ -909,7 +909,16 @@ def cancel_appointment_admin(appointment_id):
 
 @admin_bp.route("/panel", methods=["GET"])
 def admin_panel_page():
-    """Entrega a interface do proprietário; os dados seguem protegidos pelas APIs."""
+    """Entrega a interface do proprietário e redireciona colaboradores para a própria área."""
+
+    if session.get("user_role") == "barber" and session.get("user_id"):
+        shop = get_db().execute(
+            "SELECT slug FROM barbershops WHERE id = ?",
+            (session.get("barbershop_id"),)
+        ).fetchone()
+        if shop is not None:
+            return redirect(url_for("barber.barber_panel_page", slug=shop["slug"]), code=303)
+        session.clear()
 
     return render_template("admin.html")
 
