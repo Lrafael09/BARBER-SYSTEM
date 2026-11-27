@@ -95,22 +95,32 @@ function validBreak(start, end) {
   return parseClock(start) !== null && parseClock(end) !== null && parseClock(end) > parseClock(start);
 }
 
-async function publicCatalog(env, slug) {
+async function publicCatalog(env, slug, url) {
   const shop = await findShop(env, slug);
   if (!shop) return json({ error: "Barbearia não encontrada." }, 404);
+  const requestedDate = url.searchParams.get("date");
+  const today = saoPauloDateTime().date;
+  const day = requestedDate ? parseDate(requestedDate) : null;
+  if (requestedDate && !day) return json({ error: "A data deve usar AAAA-MM-DD." }, 400);
+  const attendanceRequired = !!day && day.value === today;
   const [services, staff] = await Promise.all([
     env.DB.prepare(
       "SELECT id,name,description,price_cents,duration_minutes FROM services WHERE barbershop_id=? AND is_active=1 ORDER BY name COLLATE NOCASE"
     ).bind(shop.id).all(),
-    env.DB.prepare(
-      "SELECT id,name,role FROM users WHERE barbershop_id=? AND is_active=1 AND (role='barber' OR (role='owner' AND can_serve=1)) ORDER BY name COLLATE NOCASE"
-    ).bind(shop.id).all()
+    attendanceRequired
+      ? env.DB.prepare(
+        "SELECT u.id,u.name,u.role FROM users u WHERE u.barbershop_id=? AND u.is_active=1 AND (u.role='barber' OR (u.role='owner' AND u.can_serve=1)) AND EXISTS (SELECT 1 FROM staff_attendance sa WHERE sa.barbershop_id=u.barbershop_id AND sa.user_id=u.id AND sa.attendance_date=? AND sa.arrived_at IS NOT NULL AND sa.departed_at IS NULL) ORDER BY u.name COLLATE NOCASE"
+      ).bind(shop.id, today).all()
+      : env.DB.prepare(
+        "SELECT id,name,role FROM users WHERE barbershop_id=? AND is_active=1 AND (role='barber' OR (role='owner' AND can_serve=1)) ORDER BY name COLLATE NOCASE"
+      ).bind(shop.id).all()
   ]);
   return json({
     shop,
     services: services.results || [],
     staff: staff.results || [],
     barbers: staff.results || [],
+    attendance_required_for_today: attendanceRequired,
     whatsapp: shop.whatsapp,
     logo_data: shop.logo_data,
     brand_color: shop.brand_color,
@@ -238,6 +248,15 @@ async function publicAvailability(env, slug, url) {
     getBookableBarber(env, shop.id, barberId)
   ]);
   if (!service || !barber) return json({ error: "Serviço ou barbeiro indisponível." }, 404);
+  if (day.value === localNow.date) {
+    const attendance = await env.DB.prepare(
+      "SELECT arrived_at,departed_at FROM staff_attendance WHERE barbershop_id=? AND user_id=? AND attendance_date=?"
+    ).bind(shop.id, barberId, day.value).first();
+    if (!attendance?.arrived_at || attendance.departed_at) {
+      return json({ date: day.value, slots: [], staff_available: false,
+        message: "Este profissional ainda não registrou chegada ou já registrou saída hoje." });
+    }
+  }
   const hours = await loadHours(env, shop.id, barberId, day.weekday);
   const { business, personal, staffBreak, effective } = hours;
   if (!business || !business.is_open || !effective || !effective.is_open) {
@@ -318,6 +337,14 @@ async function createAppointment(request, env, slug) {
   if (!service) return json({ error: "Serviço indisponível." }, 404);
   if (!customer) return json({ error: "Cliente não encontrado nesta barbearia." }, 404);
   if (!barber) return json({ error: "Barbeiro não encontrado nesta barbearia." }, 404);
+  if (day.value === localNow.date) {
+    const attendance = await env.DB.prepare(
+      "SELECT arrived_at,departed_at FROM staff_attendance WHERE barbershop_id=? AND user_id=? AND attendance_date=?"
+    ).bind(shop.id, barberId, day.value).first();
+    if (!attendance?.arrived_at || attendance.departed_at) {
+      return json({ error: "Este profissional não está disponível para agendamentos hoje. Ele precisa registrar a chegada e ainda não pode ter registrado a saída." }, 409);
+    }
+  }
   const duration = Number(service.duration_minutes);
   const endMinutes = startMinutes + duration;
   if (!Number.isSafeInteger(duration) || duration < 1 || duration > 1440 || endMinutes >= 1440) {
@@ -403,7 +430,7 @@ async function cancelPublicAppointment(request, env, slug, appointmentId) {
 
 export async function handlePublicApi(request, env, url) {
   const catalog = url.pathname.match(/^\/api\/public\/shops\/([a-z0-9-]+)\/catalog$/);
-  if (catalog && request.method === "GET") return publicCatalog(env, catalog[1]);
+  if (catalog && request.method === "GET") return publicCatalog(env, catalog[1], url);
 
   const schedule = url.pathname.match(/^\/api\/public\/shops\/([a-z0-9-]+)\/schedule$/);
   if (schedule && request.method === "GET") return publicSchedule(env, schedule[1]);
