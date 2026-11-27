@@ -349,6 +349,9 @@ async function createAppointment(request, env, slug) {
     if (String(error?.message || error).includes("appointment_conflict")) {
       return json({ error: "Esse horário acabou de ser ocupado. Escolha outro." }, 409);
     }
+    if (String(error?.message || error).includes("time_block_conflict")) {
+      return json({ error: "O barbeiro ou a barbearia ficou indisponível nesse horário." }, 409);
+    }
     throw error;
   }
 }
